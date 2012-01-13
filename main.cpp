@@ -3,6 +3,7 @@
 #include <math.h>       /* for cos(), sin(), and sqrt() */
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <vector>
 #include <map>
 #include <glm/glm.hpp>
@@ -16,6 +17,7 @@ struct Bone
     float length;
 
     glm::vec3 pos;
+    // x,y,z, angle
     glm::vec4 rot;
     
     Bone *parent;
@@ -26,16 +28,33 @@ struct Bone
             Bone *parnt) :
         name(nm), length(l), pos(relpos), rot(relrot),
         parent(parnt)
-    {
-    }
+    { }
 
     Bone(const std::string &line);
+};
+
+struct BoneFrame
+{
+    // frame number
+    int num;
+    // Length of the bone
+    float length;
+    // x,y,z, angle
+    glm::vec4 rot;
 };
 
 void renderBone(Bone *bone);
 void printSkeleton(Bone *skeleton);
 Bone* readBone(const std::string &bonestr, Bone *skeleton,
         std::map<std::string, Bone*> &bonemap);
+
+// Sets the pose of the passed skeleton as determed by the key frames a and b.
+// aframes and bframes map bone names to BoneFrame structs which will be 
+// interpolated according to frame.
+void setPose(Bone *skeleton,
+        std::map<std::string, BoneFrame>& aframes,
+        std::map<std::string, BoneFrame>& bframes,
+        int frame);
 
 
 int windowWidth = 800, windowHeight = 600;
@@ -129,21 +148,16 @@ int main(int argc, char **argv)
     // START MY SETUP
     // --------------------
 
-    char *bonestrs[7] = {
-        "head 0 3 0 0 0 1 -90 2 NULL", 
-        "backh 0 0 0 0 0 0 0 3 head", 
-        "backl 0 0 0 0 0 0 0 3 backh", 
-        "rleg 0 0 0 0 0 1 20 3 backl", 
-        "lleg 0 0 0 0 0 1 -20 3 backl", 
-        "rarm 0 0 0 0 0 1 60 3 head", 
-        "larm 0 0 0 0 0 1 -60 3 head", 
-    };
+    std::string bonefile = "test.bones";
+
+    std::ifstream file(bonefile.c_str());
 
     skeleton = NULL;
     std::map<std::string, Bone*> bonemap;
-    for (int i = 0; i < 7; i++)
+    std::string line;
+    while (std::getline(file, line))
     {
-        skeleton = readBone(bonestrs[i], skeleton, bonemap);
+        skeleton = readBone(line, skeleton, bonemap);
     }
 
     // --------------------
@@ -223,4 +237,34 @@ void printSkeleton(Bone *cur)
 
     for (size_t i = 0; i < cur->children.size(); i++)
         printSkeleton(cur->children[i]);
+}
+
+BoneFrame interpolateBoneFrames(const BoneFrame& a, const BoneFrame& b, int frame)
+{
+    return a;
+}
+
+void setPose(Bone *skeleton,
+        const std::map<std::string, BoneFrame> &aframe,
+        const std::map<std::string, BoneFrame> &bframe,
+        int framenum)
+{
+    std::string curname = skeleton->name;
+    
+    assert(aframe.find(curname) != aframe.end());
+    assert(bframe.find(curname) != bframe.end());
+
+    const BoneFrame a = aframe.find(curname)->second;
+    const BoneFrame b = bframe.find(curname)->second;
+
+    assert(a.num <= framenum && b.num > framenum);
+
+    BoneFrame final = interpolateBoneFrames(a, b, framenum);
+
+    skeleton->length = final.length;
+    skeleton->rot = final.rot;
+
+    // Recurse through all bones
+    for (size_t i = 0; i < skeleton->children.size(); i++)
+        setPose(skeleton->children[i], aframe, bframe, framenum);
 }
