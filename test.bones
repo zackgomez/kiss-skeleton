@@ -4,7 +4,7 @@ backh 0 0 0 0 0 0 0 2 head
 backl 0 0 0 0 0 0 0 2 backh
 rleg 0 0 0 0 0 1 20 3 backl
 lleg 0 0 0 0 0 1 -20 3 backl
-rarmh 0 0 0 0 0 1 60 2 head
-larmh 0 0 0 0 0 1 -60 2 head
-rarml 0 0 0 0 0 1 -30 2 rarmh
-larml 0 0 0 0 0 1 30 2 larmh
+rarmh 0 0 0 0 0 1 60 1.5 head
+larmh 0 0 0 0 0 1 -60 1.5 head
+rarml 0 0 0 0 0 1 -30 1.5 rarmh
+larml 0 0 0 0 0 1 30 1.5 larmh

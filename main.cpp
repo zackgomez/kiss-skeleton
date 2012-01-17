@@ -53,12 +53,17 @@ struct Animation
 void renderBone(Bone *bone);
 void printBone(Bone *skeleton);
 void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton);
-
+Animation readAnimation(const std::string &filename);
+void setPose(std::map<std::string, Bone*> &skeleton,
+        const Animation &anim, int frame);
 void setPose(std::map<std::string, Bone*> &skeleton,
         const std::map<std::string, BoneFrame> &pose);
 
 int windowWidth = 800, windowHeight = 600;
+
 std::map<std::string, Bone*> skeleton;
+Animation anim;
+int frame = 0;
 
 // Peter's mystical ui controller for arcball transformation and stuff
 static UIState *ui;
@@ -70,6 +75,9 @@ void redraw(void)
 
     // Apply the camera transformation.
     ui->ApplyViewingTransformation();
+
+    // Set the bone pose
+    setPose(skeleton, anim, frame);
 
     glMatrixMode(GL_MODELVIEW);
     renderBone(skeleton["root"]);
@@ -111,6 +119,16 @@ void keyboard(GLubyte key, GLint x, GLint y)
         exit(0);
     if (key == 'd')
         printBone(skeleton["root"]);
+    if (key == 'n')
+    {
+        frame++;
+        glutPostRedisplay();
+    }
+    if (key == 'r')
+    {
+        frame = 0;
+        glutPostRedisplay();
+    }
 }
 
 int main(int argc, char **argv)
@@ -152,6 +170,8 @@ int main(int argc, char **argv)
     std::string line;
     while (std::getline(file, line))
         readBone(line, skeleton);
+
+    anim = readAnimation("testanim.anim");
 
     // --------------------
     // END MY SETUP
@@ -243,17 +263,35 @@ void setPose(std::map<std::string, Bone*> &skeleton,
         const std::string name = it->first;
         const BoneFrame bframe = it->second;
 
+        std::cout << "Setting bone " << name << " length " << bframe.length << '\n';
+
         assert(skeleton.find(name) != skeleton.end());
 
         Bone *bone = skeleton[name];
         bone->length = bframe.length;
         bone->rot = bframe.rot;
+
+        std::cout << "Did it work? length = " << skeleton[name]->length << '\n';
     }
+}
+
+BoneFrame readBoneFrame(std::istream &is)
+{
+    BoneFrame bf;
+    is >> bf.length >> bf.rot.x >> bf.rot.y >> bf.rot.z >> bf.rot[3];
+    if (!is)
+    {
+        std::cerr << "Unable to read BoneFrame\n";
+        exit(1);
+    }
+
+    return bf;
 }
 
 Animation readAnimation(const std::string &filename)
 {
     Animation anim;
+    Keyframe keyframe;
     
     std::ifstream file(filename.c_str());
     if (!file)
@@ -265,8 +303,95 @@ Animation readAnimation(const std::string &filename)
     file >> anim.name >> anim.numframes;
     if (!file)
     {
-        std::cer << "Unable to read header from animation file: " << filename << '\n';
+        std::cerr << "Unable to read header from animation file: " << filename << '\n';
+        exit(1);
     }
 
+    std::string line;
+    keyframe.frame = -1;
+    while (std::getline(file, line))
+    {
+        if (line.empty())
+            continue;
+
+        std::stringstream ss(line);
+        std::string name;
+        ss >> name;
+        if (name == "KEYFRAME")
+        {
+            int num;
+            ss >> num;
+            if (!ss)
+            {
+                std::cerr << "Unable to read keyframe line: " << line << '\n';
+                exit(1);
+            }
+
+            if (keyframe.frame >= 0)
+                anim.keyframes.push_back(keyframe);
+            keyframe = Keyframe();
+            keyframe.frame = num;
+        }
+        else
+        {
+            BoneFrame bf = readBoneFrame(ss);
+            keyframe.bones[name] = bf;
+        }
+    }
+
+    anim.keyframes.push_back(keyframe);
+
     return anim;
+}
+
+Keyframe interpolate(const Keyframe &a, const Keyframe &b, int fnum)
+{
+    // TODO do the quaternion rotation interpolation
+    Keyframe ret;
+    ret.frame = fnum;
+
+    assert(a.frame <= fnum && b.frame >= fnum);
+
+    std::map<std::string, BoneFrame>::const_iterator it;
+    for (it = a.bones.begin(); it != a.bones.end(); it++)
+    {
+        const std::string &name = it->first;
+        assert(b.bones.find(name) != b.bones.end());
+
+        const BoneFrame &af = it->second;
+        const BoneFrame &bf = b.bones.find(name)->second;
+
+        float fact = static_cast<float>(fnum - a.frame) / (b.frame - a.frame);
+
+        BoneFrame cf;
+        cf.rot = af.rot;
+        cf.length = fact * bf.length + (1 - fact) * af.length;
+        ret.bones[name] = cf;
+    }
+
+    return ret;
+}
+
+void setPose(std::map<std::string, Bone*> &skeleton,
+        const Animation &anim, int frame)
+{
+    // Just stick on the last frame, no repeat for now
+    if (frame >= anim.numframes)
+    {
+        setPose(skeleton, anim.keyframes.back().bones);
+        return;
+    }
+
+    // Find the frames to interpolate
+    size_t i;
+    for (i = 1; i < anim.keyframes.size(); i++)
+    {
+        if (anim.keyframes[i].frame > frame)
+            break;
+    }
+    assert(i < anim.keyframes.size());
+
+    Keyframe kf = interpolate(anim.keyframes[i - 1], anim.keyframes[i], frame);
+
+    setPose(skeleton, kf.bones);
 }
