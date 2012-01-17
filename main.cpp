@@ -29,45 +29,29 @@ struct Bone
         name(nm), length(l), pos(relpos), rot(relrot),
         parent(parnt)
     { }
-
-    Bone(const std::string &line);
 };
 
 struct BoneFrame
 {
-    // frame number
-    int num;
-    // Length of the bone
     float length;
-    // x,y,z, angle
     glm::vec4 rot;
 };
 
 void renderBone(Bone *bone);
-void printSkeleton(Bone *skeleton);
-Bone* readBone(const std::string &bonestr, Bone *skeleton,
-        std::map<std::string, Bone*> &bonemap);
+void printBone(Bone *skeleton);
+void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton);
 
-// Sets the pose of the passed skeleton as determed by the key frames a and b.
-// aframes and bframes map bone names to BoneFrame structs which will be 
-// interpolated according to frame.
-void setPose(Bone *skeleton,
-        std::map<std::string, BoneFrame>& aframes,
-        std::map<std::string, BoneFrame>& bframes,
-        int frame);
-
+void setPose(std::map<std::string, Bone*> &skeleton,
+        const std::map<std::string, BoneFrame> &pose);
 
 int windowWidth = 800, windowHeight = 600;
-Bone *skeleton = NULL;
+std::map<std::string, Bone*> skeleton;
 
 // Peter's mystical ui controller for arcball transformation and stuff
 static UIState *ui;
 
 void redraw(void)
 {
-    // Update first
-    // TODO
-
     // Now render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -75,7 +59,7 @@ void redraw(void)
     ui->ApplyViewingTransformation();
 
     glMatrixMode(GL_MODELVIEW);
-    renderBone(skeleton);
+    renderBone(skeleton["root"]);
 
     glutSwapBuffers();
 }
@@ -113,7 +97,7 @@ void keyboard(GLubyte key, GLint x, GLint y)
     if (key == 27)
         exit(0);
     if (key == 'd')
-        printSkeleton(skeleton);
+        printBone(skeleton["root"]);
 }
 
 int main(int argc, char **argv)
@@ -152,13 +136,9 @@ int main(int argc, char **argv)
 
     std::ifstream file(bonefile.c_str());
 
-    skeleton = NULL;
-    std::map<std::string, Bone*> bonemap;
     std::string line;
     while (std::getline(file, line))
-    {
-        skeleton = readBone(line, skeleton, bonemap);
-    }
+        readBone(line, skeleton);
 
     // --------------------
     // END MY SETUP
@@ -196,7 +176,7 @@ void renderBone(Bone *bone)
     glPopMatrix();
 }
 
-Bone* readBone(const std::string &bonestr, Bone *skeleton, std::map<std::string, Bone*> &bonemap)
+void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton)
 {
     std::stringstream ss(bonestr);
     std::string name, parentname;
@@ -205,28 +185,28 @@ Bone* readBone(const std::string &bonestr, Bone *skeleton, std::map<std::string,
     if (!ss)
     {
         std::cerr << "Could not read bone from string: '" << bonestr << "'\n";
-        return NULL;
+        assert(false);
     }
 
+    Bone *parent;
     if (parentname == "NULL")
     {
-        assert(!skeleton);
-        Bone *newbone = new Bone(name, length, glm::vec3(x, y, z), glm::vec4(rotx, roty, rotz, a), NULL);
-        bonemap[name] = newbone;
-        return newbone;
+        assert(name == "root");
+        parent = NULL;
+    }
+    else
+    {
+        assert(skeleton.find(parentname) != skeleton.end());
+        parent = skeleton[parentname];
     }
 
-    assert(skeleton);
-    assert(bonemap.find(parentname) != bonemap.end());
-    Bone *parent = bonemap[parentname];
-
     Bone *newbone = new Bone(name, length, glm::vec3(x, y, z), glm::vec4(rotx, roty, rotz, a), parent);
-    parent->children.push_back(newbone);
-    bonemap[name] = newbone;
-    return skeleton;
+    if (parent)
+        parent->children.push_back(newbone);
+    skeleton[name] = newbone;
 }
 
-void printSkeleton(Bone *cur)
+void printBone(Bone *cur)
 {
     if (cur == NULL)
         return;
@@ -236,35 +216,23 @@ void printSkeleton(Bone *cur)
         << cur->length << ' ' << (cur->parent == NULL ? "NULL" : cur->parent->name) << '\n';
 
     for (size_t i = 0; i < cur->children.size(); i++)
-        printSkeleton(cur->children[i]);
+        printBone(cur->children[i]);
 }
 
-BoneFrame interpolateBoneFrames(const BoneFrame& a, const BoneFrame& b, int frame)
+void setPose(std::map<std::string, Bone*> &skeleton,
+        const std::map<std::string, BoneFrame> &pose)
 {
-    return a;
+    std::map<std::string, BoneFrame>::const_iterator it;
+    for (it = pose.begin(); it != pose.end(); it++)
+    {
+        const std::string name = it->first;
+        const BoneFrame bframe = it->second;
+
+        assert(skeleton.find(name) != skeleton.end());
+
+        Bone *bone = skeleton[name];
+        bone->length = bframe.length;
+        bone->rot = bframe.rot;
+    }
 }
 
-void setPose(Bone *skeleton,
-        const std::map<std::string, BoneFrame> &aframe,
-        const std::map<std::string, BoneFrame> &bframe,
-        int framenum)
-{
-    std::string curname = skeleton->name;
-    
-    assert(aframe.find(curname) != aframe.end());
-    assert(bframe.find(curname) != bframe.end());
-
-    const BoneFrame a = aframe.find(curname)->second;
-    const BoneFrame b = bframe.find(curname)->second;
-
-    assert(a.num <= framenum && b.num > framenum);
-
-    BoneFrame final = interpolateBoneFrames(a, b, framenum);
-
-    skeleton->length = final.length;
-    skeleton->rot = final.rot;
-
-    // Recurse through all bones
-    for (size_t i = 0; i < skeleton->children.size(); i++)
-        setPose(skeleton->children[i], aframe, bframe, framenum);
-}
