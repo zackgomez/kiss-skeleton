@@ -2,16 +2,16 @@ headstretch
 40
 
 KEYFRAME 0
-head 2 0 0 1 -90
+head 2 0 0 1 0
 
 KEYFRAME 10
-head 1 0 0 1 -90
+head 1 0 0 1 0
 
 KEYFRAME 20
-head 2 0 0 1 -90
+head 2 0 0 1 0
 
 KEYFRAME 30
-head 3 0 0 1 -90
+head 3 0 0 1 0
 
 KEYFRAME 40
-head 2 0 0 1 -90
+head 2 0 0 1 0

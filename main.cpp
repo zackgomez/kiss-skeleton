@@ -344,9 +344,19 @@ Animation readAnimation(const std::string &filename)
     return anim;
 }
 
+glm::vec4 getquat(const glm::vec4 &rot)
+{
+    float rad = rot[3] * M_PI / 180.f / 2.f;
+
+    return glm::vec4(cosf(rad),
+            rot[0] * sinf(rad),
+            rot[1] * sinf(rad),
+            rot[2] * sinf(rad));
+}
+
+
 Keyframe interpolate(const Keyframe &a, const Keyframe &b, int fnum)
 {
-    // TODO do the quaternion rotation interpolation
     Keyframe ret;
     ret.frame = fnum;
 
@@ -363,9 +373,20 @@ Keyframe interpolate(const Keyframe &a, const Keyframe &b, int fnum)
 
         float fact = static_cast<float>(fnum - a.frame) / (b.frame - a.frame);
 
+        glm::vec4 aquat = getquat(af.rot);
+        glm::vec4 bquat = getquat(bf.rot);
+
+        glm::vec4 interquat = fact * bquat + (1 - fact) * aquat;
+        interquat /= glm::length(interquat);
+        glm::vec4 interrot = glm::vec4(interquat[1], interquat[2], interquat[3],
+                2*acos(interquat[0]) / M_PI * 180.f);
+
+        float interlength = fact * bf.length + (1 - fact) * af.length;
+
+
         BoneFrame cf;
-        cf.rot = af.rot;
-        cf.length = fact * bf.length + (1 - fact) * af.length;
+        cf.rot = interrot;
+        cf.length = interlength;
         ret.bones[name] = cf;
     }
 
