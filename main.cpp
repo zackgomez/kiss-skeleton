@@ -37,6 +37,19 @@ struct BoneFrame
     glm::vec4 rot;
 };
 
+struct Keyframe
+{
+    int frame;
+    std::map<std::string, BoneFrame> bones;
+};
+
+struct Animation
+{
+    std::string name;
+    int numframes;
+    std::vector<Keyframe> keyframes;
+};
+
 void renderBone(Bone *bone);
 void printBone(Bone *skeleton);
 void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton);
@@ -206,6 +219,8 @@ void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton
     skeleton[name] = newbone;
 }
 
+
+
 void printBone(Bone *cur)
 {
     if (cur == NULL)
@@ -236,3 +251,22 @@ void setPose(std::map<std::string, Bone*> &skeleton,
     }
 }
 
+Animation readAnimation(const std::string &filename)
+{
+    Animation anim;
+    
+    std::ifstream file(filename.c_str());
+    if (!file)
+    {
+        std::cerr << "Unable to open animation file: " << filename << '\n';
+        exit(1);
+    }
+
+    file >> anim.name >> anim.numframes;
+    if (!file)
+    {
+        std::cer << "Unable to read header from animation file: " << filename << '\n';
+    }
+
+    return anim;
+}

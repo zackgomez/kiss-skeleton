@@ -1,47 +1,14 @@
-testanim
-9
+headstretch 
+3
 
-keyframe 0
-head  3 0 0 1 -90
-backh 3 0 0 0 0
-backl 3 0 0 0 0
-rleg  3 0 0 1 20
-lleg  3 0 0 1 -20
-rarm  3 0 0 1 60
-larm  3 0 0 1 -60
+KEYFRAME 0
+head 2 0 0 1 -90
 
-keyframe 3
-head  4 0 0 1 -90
-backh 3 0 0 0 0
-backl 3 0 0 0 0
-rleg  3 0 0 1 20
-lleg  3 0 0 1 -20
-rarm  3 0 0 1 60
-larm  3 0 0 1 -60
+KEYFRAME 1
+head 1 0 0 1 -90
 
-keyframe 6
-head  5 0 0 1 -90
-backh 3 0 0 0 0
-backl 3 0 0 0 0
-rleg  3 0 0 1 20
-lleg  3 0 0 1 -20
-rarm  3 0 0 1 60
-larm  3 0 0 1 -60
+KEYFRAME 2
+head 2 0 0 1 -90
 
-keyframe 6
-head  4 0 0 1 -90
-backh 3 0 0 0 0
-backl 3 0 0 0 0
-rleg  3 0 0 1 20
-lleg  3 0 0 1 -20
-rarm  3 0 0 1 60
-larm  3 0 0 1 -60
-
-keyframe 9
-head  4 0 0 1 -90
-backh 3 0 0 0 0
-backl 3 0 0 0 0
-rleg  3 0 0 1 20
-lleg  3 0 0 1 -20
-rarm  3 0 0 1 60
-larm  3 0 0 1 -60
+KEYFRAME 3
+head 3 0 0 1 -90

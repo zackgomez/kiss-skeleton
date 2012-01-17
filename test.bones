@@ -1,7 +1,7 @@
 root 0 0 0 0 0 0 0 0 NULL
 head 0 3 0 0 0 1 -90 2 root
-backh 0 0 0 0 0 0 0 3 head
-backl 0 0 0 0 0 0 0 3 backh
+backh 0 0 0 0 0 0 0 2 head
+backl 0 0 0 0 0 0 0 2 backh
 rleg 0 0 0 0 0 1 20 3 backl
 lleg 0 0 0 0 0 1 -20 3 backl
 rarmh 0 0 0 0 0 1 60 2 head
