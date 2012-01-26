@@ -145,16 +145,62 @@ glm::mat4 getBoneMatrix(const Bone* bone)
     return parentTransform * transform;
 }
 
+
+void rotate(float &x, float &y, float angle){
+    float c=cos(angle),s=sin(angle);
+    float x0 = x;
+    x = x*c - s*y;
+    y = x0*s + x0*y;
+}
+
 void setBoneTipPosition(Bone *bone, const glm::vec3 &worldPos)
 {
     // First get the parent transform, we can't adjust that
     glm::mat4 parentTransform = getBoneMatrix(bone->parent);
     glm::mat4 inverseParentTransform = glm::inverse(parentTransform);
+    glm::mat4 curPoseTransform = getBoneMatrix(bone);
 
     glm::vec4 pt(worldPos, 1.f);
     pt = inverseParentTransform * pt; pt /= pt.w;
 
-    std::cout << "difference between parent tip and desired tip: " << pt.x << ' ' << pt.y << ' ' << pt.z << '\n';
+    glm::vec4 curpt = curPoseTransform * glm::vec4(0,0,0,1);
+    curpt /= curpt.w;
+
+    // vector in direction of point of bone length
+    glm::vec3 ptvec = glm::normalize(glm::vec3(pt)) * bone->length;
+    std::cout << "---------------------\n";
+    std::cout << "worldpos (argument): " << worldPos.x << ' ' << worldPos.y << ' ' << worldPos.z << '\n';
+    std::cout << "difference between parent tip and desired tip: " << ptvec.x << ' ' << ptvec.y << ' ' << ptvec.z << '\n';
+    std::cout << "difference between current tip and desired tip: " << worldPos.x-curpt.x << ' ' << worldPos.y-curpt.y << ' ' << worldPos.z-curpt.z << '\n';
+
+    glm::vec3 rotvec(1.f, 0.f, 0.f);
+
+    rotate(rotvec.y, rotvec.z, 2); // Replace 4 by whatever you want. This is your free parameter
+    rotate(rotvec.x, rotvec.z, atan2(ptvec.z, sqrtf(ptvec.x*ptvec.x + ptvec.y*ptvec.y)));
+    rotate(rotvec.x, rotvec.y, atan2(ptvec.y, ptvec.x));
+    rotvec = glm::normalize(rotvec);
+
+    std::cout << "rotation vec: " << rotvec.x << ' ' << rotvec.y << ' ' << rotvec.z << '\n';
+
+    // XXX not rotvec!
+    float angle = 180.f / M_PI * glm::dot(ptvec, glm::vec3(1.f, 0.f, 0.f));
+
+    std::cout << "angle between tips: " << angle << '\n';
+
+    std::cout << "angle between current rotvecs: " << 180.f / M_PI * acos(glm::dot(rotvec, glm::vec3(bone->rot))) << '\n';
+
+    bone->rot.x = rotvec.x;
+    bone->rot.y = rotvec.y;
+    bone->rot.z = rotvec.z;
+    bone->rot.w = angle;
+
+    // Sanity check
+    glm::mat4 sanitymat = glm::translate(glm::mat4(1.f), bone->pos);
+    sanitymat = glm::rotate(sanitymat, angle, rotvec);
+    glm::vec4 sanityvec = sanitymat * glm::vec4(bone->length, 0.f, 0.f, 1.f);
+    sanityvec /= sanityvec.w;
+
+    std::cout << "sanityvec (parent space): " << sanityvec.x << ' ' << sanityvec.y << ' ' << sanityvec.z << '\n';
 }
 
 void mouse(int button, int state, int x, int y)
@@ -219,6 +265,8 @@ void motion(int x, int y)
         world_pos /= world_pos.w;
 
         setBoneTipPosition(skeleton[selectedBone], glm::vec3(world_pos));
+
+        glutPostRedisplay();
 
         //std::cout << "world pos: " << world_pos.x << ' ' << world_pos.y << ' ' << world_pos.z << '\n';
     }
