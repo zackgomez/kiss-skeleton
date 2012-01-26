@@ -6,6 +6,9 @@ all: kiss-skeleton
 kiss-skeleton: main.o ArcBall.o uistate.o
 	g++ $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
+run: kiss-skeleton
+	./kiss-skeleton
+
 .PHONY: clean
 clean:
 	rm -rf *.o kiss-skeleton

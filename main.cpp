@@ -58,12 +58,19 @@ void setPose(std::map<std::string, Bone*> &skeleton,
         const Animation &anim, int frame);
 void setPose(std::map<std::string, Bone*> &skeleton,
         const std::map<std::string, BoneFrame> &pose);
+void renderCube();
 
 int windowWidth = 800, windowHeight = 600;
 
 std::map<std::string, Bone*> skeleton;
 Animation anim;
 int frame = 0;
+bool drawCubes = true;
+std::string selectedBone = "";
+glm::vec3 selectedBonePos;
+
+// the ndc positions of each bone tip cube
+std::map<std::string, glm::vec3> bone_ndc;
 
 // Peter's mystical ui controller for arcball transformation and stuff
 static UIState *ui;
@@ -77,7 +84,8 @@ void redraw(void)
     ui->ApplyViewingTransformation();
 
     // Set the bone pose
-    setPose(skeleton, anim, frame);
+    // XXX
+    //setPose(skeleton, anim, frame);
 
     glMatrixMode(GL_MODELVIEW);
     renderBone(skeleton["root"]);
@@ -100,16 +108,88 @@ void reshape(int width, int height)
     ui->SetupViewingFrustum();
 }
 
+glm::vec2 getNDC(int x, int y)
+{
+    // Find the cube they clicked on
+    float screenx = static_cast<float>(x) / windowWidth;
+    float screeny = static_cast<float>(y) / windowHeight;
+
+    glm::vec2 screen_pos(screenx, screeny);
+    screen_pos -= 0.5f; screen_pos *= 2.f;
+    screen_pos.y *= -1;
+
+    return screen_pos;
+}
+
+glm::mat4 getModelViewProjectionMatrix()
+{
+    glm::mat4 pmat, mvmat;
+    glGetFloatv(GL_PROJECTION_MATRIX, glm::value_ptr(pmat));
+    glGetFloatv(GL_MODELVIEW_MATRIX,  glm::value_ptr(mvmat));
+
+    return pmat * mvmat;
+}
+
 void mouse(int button, int state, int x, int y)
 {
-    // Just pass it on to the ui controller.
-    ui->MouseFunction(button, state, x, y);
+    if (button == GLUT_RIGHT_BUTTON && drawCubes)
+    {
+        if (state == GLUT_DOWN)
+        {
+            selectedBone = "";
+
+            glm::vec2 screen_pos = getNDC(x, y);
+            //std::cout << "Click screen pos: " << screen_pos.x << ' ' << screen_pos.y << '\n';
+
+            std::map<std::string, glm::vec3>::const_iterator it;
+            float closestZ = HUGE_VAL;
+            for (it = bone_ndc.begin(); it != bone_ndc.end(); it++)
+            {
+                std::string name = it->first;
+                glm::vec3 bonepos = it->second;
+
+                const float select_dist = 0.01f;
+
+                if (glm::length(glm::vec2(bonepos) - screen_pos) < select_dist &&
+                    bonepos.z < closestZ)
+                {
+                    selectedBone = name;
+                    closestZ = bonepos.z;
+                    selectedBonePos = bonepos;
+                }
+            }
+
+            //std::cout << "Selected bone: " << selectedBone << '\n';
+        }
+        if (state == GLUT_UP)
+            selectedBone = "";
+
+        glutPostRedisplay();
+    }
+    else
+    {
+        // Just pass it on to the ui controller.
+        ui->MouseFunction(button, state, x, y);
+    }
 }
 
 void motion(int x, int y)
 {
-    // Just pass it on to the ui controller.
-    ui->MotionFunction(x, y);
+    if (!selectedBone.empty())
+    {
+        glm::vec2 screen_pos = getNDC(x, y);
+        glm::mat4 inverseMat = glm::inverse(getModelViewProjectionMatrix());
+
+        glm::vec4 world_pos = inverseMat * glm::vec4(screen_pos, selectedBonePos.z, 1.f);
+        world_pos /= world_pos.w;
+
+        std::cout << "world pos: " << world_pos.x << ' ' << world_pos.y << ' ' << world_pos.z << '\n';
+    }
+    else
+    {
+        // Just pass it on to the ui controller.
+        ui->MotionFunction(x, y);
+    }
 }
 
 void keyboard(GLubyte key, GLint x, GLint y)
@@ -120,15 +200,14 @@ void keyboard(GLubyte key, GLint x, GLint y)
     if (key == 'd')
         printBone(skeleton["root"]);
     if (key == 'n')
-    {
         frame++;
-        glutPostRedisplay();
-    }
     if (key == 'r')
-    {
         frame = 0;
-        glutPostRedisplay();
-    }
+    if (key == 'c')
+        drawCubes = !drawCubes;
+
+    // Update display...
+    glutPostRedisplay();
 }
 
 int main(int argc, char **argv)
@@ -198,8 +277,30 @@ void renderBone(Bone *bone)
         glVertex3f(bone->length, 0, 0);
     glEnd();
 
-
+    // Move to the tip of the bone
     glTranslatef(bone->length, 0, 0);
+
+    // Draw a cube for ease of posing
+    if (drawCubes)
+    {
+        glm::vec4 ndc_coord(0.f, 0.f, 0.f, 1.f);
+        ndc_coord = getModelViewProjectionMatrix() * ndc_coord;
+        ndc_coord /= ndc_coord.w;
+
+        bone_ndc[bone->name] = glm::vec3(ndc_coord);
+
+        //std::cout << bone->name << " screen coord: " << ndc_coord.x << ' ' << ndc_coord.y << ' ' << ndc_coord.z << ' ' << ndc_coord.w << '\n';
+
+        float cube_scale = bone->length / 10.f;
+        if (bone->name == selectedBone)
+            glColor3f(0.2, 0.2, 0.8);
+        else
+            glColor3f(0.5, 0.5, 0.5);
+        glPushMatrix();
+        glScalef(cube_scale, cube_scale, cube_scale);
+        renderCube();
+        glPopMatrix();
+    }
 
     for (size_t i = 0; i < bone->children.size(); i++)
     {
@@ -240,7 +341,6 @@ void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton
 }
 
 
-
 void printBone(Bone *cur)
 {
     if (cur == NULL)
@@ -263,15 +363,11 @@ void setPose(std::map<std::string, Bone*> &skeleton,
         const std::string name = it->first;
         const BoneFrame bframe = it->second;
 
-        std::cout << "Setting bone " << name << " length " << bframe.length << '\n';
-
         assert(skeleton.find(name) != skeleton.end());
 
         Bone *bone = skeleton[name];
         bone->length = bframe.length;
         bone->rot = bframe.rot;
-
-        std::cout << "Did it work? length = " << skeleton[name]->length << '\n';
     }
 }
 
@@ -415,4 +511,23 @@ void setPose(std::map<std::string, Bone*> &skeleton,
     Keyframe kf = interpolate(anim.keyframes[i - 1], anim.keyframes[i], frame);
 
     setPose(skeleton, kf.bones);
+}
+
+GLfloat vertices[] = {
+    1,1,1,  -1,1,1,  -1,-1,1,  1,-1,1,        // v0-v1-v2-v3
+    1,1,1,  1,-1,1,  1,-1,-1,  1,1,-1,        // v0-v3-v4-v5
+    1,1,1,  1,1,-1,  -1,1,-1,  -1,1,1,        // v0-v5-v6-v1
+    -1,1,1,  -1,1,-1,  -1,-1,-1,  -1,-1,1,    // v1-v6-v7-v2
+    -1,-1,-1,  1,-1,-1,  1,-1,1,  -1,-1,1,    // v7-v4-v3-v2
+    1,-1,-1,  -1,-1,-1,  -1,1,-1,  1,1,-1};   // v4-v7-v6-v5
+
+
+void renderCube()
+{
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(3, GL_FLOAT, 0, vertices);
+
+    glDrawArrays(GL_QUADS, 0, 24);
+
+    glDisableClientState(GL_VERTEX_ARRAY);
 }
