@@ -52,6 +52,7 @@ struct Animation
 
 void renderBone(Bone *bone);
 void printBone(Bone *skeleton);
+void dumpPose(const Keyframe &kf);
 void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton);
 Animation readAnimation(const std::string &filename);
 void setPose(std::map<std::string, Bone*> &skeleton,
@@ -68,6 +69,8 @@ int frame = 0;
 bool drawCubes = true;
 std::string selectedBone = "";
 glm::vec3 selectedBonePos;
+Keyframe curframe;
+bool angleMode = true; // if false then length mode
 
 // the ndc positions of each bone tip cube
 std::map<std::string, glm::vec3> bone_ndc;
@@ -84,8 +87,8 @@ void redraw(void)
     ui->ApplyViewingTransformation();
 
     // Set the bone pose
-    // XXX
-    //setPose(skeleton, anim, frame);
+    // TODO do animation (set curframe somewhere by interpolation
+    setPose(skeleton, curframe.bones);
 
     glMatrixMode(GL_MODELVIEW);
     renderBone(skeleton["root"]);
@@ -153,45 +156,58 @@ void rotate(float &x, float &y, float angle){
     y = x0*s + x0*y;
 }
 
-void setBoneTipPosition(Bone *bone, const glm::vec3 &worldPos)
+void setBoneTipPosition(Bone *bone, const glm::vec3 &worldPos, Keyframe *pose)
 {
     // First get the parent transform, we can't adjust that
     glm::mat4 parentTransform = getBoneMatrix(bone->parent);
     glm::mat4 inverseParentTransform = glm::inverse(parentTransform);
-    glm::mat4 curPoseTransform = getBoneMatrix(bone);
+    glm::mat4 curBoneTransform = glm::translate(glm::mat4(1.f), bone->pos);
+    curBoneTransform = glm::rotate(curBoneTransform, bone->rot.w, glm::vec3(bone->rot));
+    curBoneTransform = glm::translate(curBoneTransform, glm::vec3(bone->length, 0.f, 0.f));
 
     glm::vec4 pt(worldPos, 1.f);
     pt = inverseParentTransform * pt; pt /= pt.w;
 
-    glm::vec4 curpt = curPoseTransform * glm::vec4(0,0,0,1);
-    curpt /= curpt.w;
 
-    // vector in direction of point of bone length
-    glm::vec3 ptvec = glm::normalize(glm::vec3(pt)) * bone->length;
-    std::cout << "---------------------\n";
-    std::cout << "worldpos (argument): " << worldPos.x << ' ' << worldPos.y << ' ' << worldPos.z << '\n';
-    std::cout << "ptvec (parent space): " << ptvec.x << ' ' << ptvec.y << ' ' << ptvec.z << '\n';
-    std::cout << "move vector (world space): " << worldPos.x-curpt.x << ' ' << worldPos.y-curpt.y << ' ' << worldPos.z-curpt.z << '\n';
+    glm::vec3 rotvec = glm::vec3(bone->rot);
+    float angle = bone->rot.w;
+    float length = bone->length;
+    if (angleMode)
+    {
+        // vector in direction of point of bone length (parent space)
+        glm::vec3 ptvec = glm::normalize(glm::vec3(pt)) * bone->length;
 
-    float angle = 180.f / M_PI * acos(glm::dot(glm::normalize(ptvec), glm::vec3(1, 0, 0)));
-    glm::vec3 rotvec = glm::cross(glm::vec3(1, 0, 0), glm::normalize(ptvec));
+        // Get the angle between untransformed and target vector (parent space)
+        angle = 180.f / M_PI * acos(glm::dot(glm::normalize(ptvec), glm::vec3(1, 0, 0)));
+        // Create an orthogonal vector to rotate around (parent space)
+        rotvec = glm::cross(glm::vec3(1, 0, 0), glm::normalize(ptvec));
+    }
+    else
+    {
+        glm::vec4 parentpt = parentTransform * glm::vec4(0, 0, 0, 1);
+        parentpt /= parentpt.w;
 
-    // Create a rotation matrix that rotates from the parent transform to the
-    // target child transform
-    glm::mat4 rotmat = glm::rotate(glm::mat4(1.f), angle, rotvec);
+        length = glm::length(glm::vec3(pt - parentpt));
+        std::cout << "new length (distance): " << length << '\n';
+        /*
+        // curpt is in parent space
+        glm::vec4 curpt = curBoneTransform * glm::vec4(0, 0, 0, 1);
+        curpt /= curpt.w;
 
-    bone->rot.x = rotvec.x;
-    bone->rot.y = rotvec.y;
-    bone->rot.z = rotvec.z;
-    bone->rot.w = angle;
+        // a dot b / mag b [proj a onto b]
+        length = glm::dot(glm::vec3(curpt), worldPos) / glm::length(curpt);
 
-    // Sanity check
-    glm::mat4 sanitymat = glm::mat4(1.f);//glm::translate(glm::mat4(1.f), bone->pos);
-    sanitymat = sanitymat * rotmat;
-    glm::vec4 sanityvec = sanitymat * glm::vec4(bone->length, 0.f, 0.f, 1.f);
-    sanityvec /= sanityvec.w;
+        std::cout << "length: " << bone->length << " |curpt|: " << glm::length(glm::vec3(curpt))
+            << " new length (projection): " << length << '\n';
+        */
+    }
 
-    std::cout << "sanityvec (parent space): " << sanityvec.x << ' ' << sanityvec.y << ' ' << sanityvec.z << " |x|= " << glm::length(glm::vec3(sanityvec)) << '\n';
+    // Set the current frame
+    BoneFrame cur;
+    cur.rot = glm::vec4(rotvec, angle);
+    cur.length = length;
+
+    pose->bones[bone->name] = cur;
 }
 
 void mouse(int button, int state, int x, int y)
@@ -255,7 +271,7 @@ void motion(int x, int y)
         glm::vec4 world_pos = inverseMat * glm::vec4(screen_pos, selectedBonePos.z, 1.f);
         world_pos /= world_pos.w;
 
-        setBoneTipPosition(skeleton[selectedBone], glm::vec3(world_pos));
+        setBoneTipPosition(skeleton[selectedBone], glm::vec3(world_pos), &curframe);
 
         glutPostRedisplay();
 
@@ -274,13 +290,21 @@ void keyboard(GLubyte key, GLint x, GLint y)
     if (key == 27)
         exit(0);
     if (key == 'd')
+    {
         printBone(skeleton["root"]);
+        dumpPose(curframe);
+    }
     if (key == 'n')
         frame++;
     if (key == 'r')
         frame = 0;
     if (key == 'c')
         drawCubes = !drawCubes;
+
+    if (key == 'l')
+        angleMode = false;
+    if (key == 'a')
+        angleMode = true;
 
     // Update display...
     glutPostRedisplay();
@@ -587,6 +611,18 @@ void setPose(std::map<std::string, Bone*> &skeleton,
     Keyframe kf = interpolate(anim.keyframes[i - 1], anim.keyframes[i], frame);
 
     setPose(skeleton, kf.bones);
+}
+
+void dumpPose(const Keyframe &kf)
+{
+    std::map<std::string, BoneFrame>::const_iterator it;
+    std::cout << "KEYFRAME " << kf.frame << '\n';
+    for (it = kf.bones.begin(); it != kf.bones.end(); it++)
+    {
+        const BoneFrame &bf = it->second;
+        std::cout << it->first << ' ' << bf.length << ' '
+            << bf.rot.x << ' ' << bf.rot.y << ' ' << bf.rot.z << ' ' << bf.rot.w << '\n';
+    }
 }
 
 GLfloat vertices[] = {

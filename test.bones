@@ -1,10 +1,12 @@
 root 0 0 0 0 0 1 -90 0 NULL
 backh 0 0 0 0 0 1 180 2 root
-backl 0 0 0 0 0 1 0 2 root
-rleg 0 0 0 0 0 1 20 3 backl
-lleg 0 0 0 0 0 1 -20 3 backl
 rarmh 0 0 0 0 0 1 -150 1.5 backh
-larmh 0 0 0 0 0 1 150 1.5 backh
 rarml 0 0 0 0 0 1 0 1.5 rarmh
+larmh 0 0 0 0 0 1 150 1.5 backh
 larml 0 0 0 0 0 1 0 1.5 larmh
-head  0 0 0 0 0 1 0 1.5 backh
+head 0 0 0 0 0 1 0 1.5 backh
+backl 0 0 0 0 0 1 0 2 root
+rleg 0 0 0 0 0 1 20 2 backl
+rshin 0 0 0 0 -7.31967e-05 -0.244513 14.1531 2 rleg
+lleg 0 0 0 0 0 1 -20 2 backl
+lshin 0 0 0 0 -7.89945e-05 0.26166 15.1686 2 lleg
