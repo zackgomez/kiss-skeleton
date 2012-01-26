@@ -1,4 +1,4 @@
-root 0 0 0 0 0 1 0 0 NULL
+root 0 0 0 0 0 1 -90 0 NULL
 backh 0 0 0 0 0 1 180 2 root
 backl 0 0 0 0 0 1 0 2 root
 rleg 0 0 0 0 0 1 20 3 backl
