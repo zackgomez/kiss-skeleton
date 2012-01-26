@@ -1,17 +1,22 @@
-headstretch 
-40
+outputted_anim
+20
 
 KEYFRAME 0
-backh 2 0 1 1 180
+
+KEYFRAME 5
+rarmh 1.5 0 0 -0.999982 89.6571
 
 KEYFRAME 10
-backh 2 0 1 1 90
+larmh 1.5 0 0 0.999979 89.6279
+rarmh 1.5 0 0 -0.999982 89.6571
+
+KEYFRAME 15
+larmh 1.5 0 0 0.999979 89.6279
+larml 1.5 0 -0 0.999908 90.7784
+rarmh 1.5 0 0 -0.999982 89.6571
 
 KEYFRAME 20
-backh 2 0 1 1 180
-
-KEYFRAME 30
-backh 2 0 1 1 270
-
-KEYFRAME 40
-backh 2 0 1 1 360
+larmh 1.5 0 0 0.999979 89.6279
+larml 1.5 0 -0 0.999908 90.7784
+rarmh 1.5 0 0 -0.999982 89.6571
+rarml 1.5 0 -0 -0.999999 90.060

@@ -52,7 +52,8 @@ struct Animation
 
 void renderBone(Bone *bone);
 void printBone(Bone *skeleton);
-void dumpPose(const Keyframe &kf);
+void dumpKeyframe(const Keyframe &kf);
+void dumpAnimation(const Animation &anim);
 void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton);
 Animation readAnimation(const std::string &filename);
 void setPose(std::map<std::string, Bone*> &skeleton,
@@ -60,17 +61,20 @@ void setPose(std::map<std::string, Bone*> &skeleton,
 void setPose(std::map<std::string, Bone*> &skeleton,
         const std::map<std::string, BoneFrame> &pose);
 void renderCube();
+std::map<std::string, Bone*> readSkeleton(const std::string &filename);
 
 int windowWidth = 800, windowHeight = 600;
 
-std::map<std::string, Bone*> skeleton;
-Animation anim;
-int frame = 0;
-bool drawCubes = true;
+bool editMode = true;
 std::string selectedBone = "";
 glm::vec3 selectedBonePos;
-Keyframe curframe;
 bool angleMode = true; // if false then length mode
+
+std::string bonefile;
+std::map<std::string, Bone*> skeleton;
+Keyframe curframe;
+Animation curanim;
+int framenum = 0;
 
 // the ndc positions of each bone tip cube
 std::map<std::string, glm::vec3> bone_ndc;
@@ -87,10 +91,9 @@ void redraw(void)
     ui->ApplyViewingTransformation();
 
     // Set the bone pose
-    // TODO do animation (set curframe somewhere by interpolation
+    glMatrixMode(GL_MODELVIEW);
     setPose(skeleton, curframe.bones);
 
-    glMatrixMode(GL_MODELVIEW);
     renderBone(skeleton["root"]);
 
     glutSwapBuffers();
@@ -212,7 +215,7 @@ void setBoneTipPosition(Bone *bone, const glm::vec3 &worldPos, Keyframe *pose)
 
 void mouse(int button, int state, int x, int y)
 {
-    if (button == GLUT_RIGHT_BUTTON && drawCubes)
+    if (button == GLUT_RIGHT_BUTTON && editMode)
     {
         if (state == GLUT_DOWN)
         {
@@ -292,19 +295,47 @@ void keyboard(GLubyte key, GLint x, GLint y)
     if (key == 'd')
     {
         printBone(skeleton["root"]);
-        dumpPose(curframe);
+        dumpAnimation(curanim);
     }
-    if (key == 'n')
-        frame++;
-    if (key == 'r')
-        frame = 0;
-    if (key == 'c')
-        drawCubes = !drawCubes;
+    if (key == '+')
+    {
+        framenum++;
+        std::cout << "framenum: " << framenum << '\n';
+    }
+    if (key == '-')
+    {
+        framenum--;
+        framenum = std::max(0, framenum);
+        std::cout << "framenum: " << framenum << '\n';
+    }
+    if (key == '0')
+    {
+        framenum = 0;
+        std::cout << "framenum: " << framenum << '\n';
+    }
+    if (key == 'e')
+        editMode = !editMode;
 
     if (key == 'l')
         angleMode = false;
     if (key == 'a')
         angleMode = true;
+
+    if (key == 'p')
+    {
+        curframe.frame = framenum;
+        curanim.keyframes.push_back(curframe);
+        curanim.numframes = std::max(curanim.numframes, framenum);
+        std::cout << "pushed a keyframe\n";
+    }
+
+    if (key == 'r')
+    {
+        curframe.frame = 0;
+        curframe.bones.clear();
+
+        skeleton = readSkeleton(bonefile);
+    }
 
     // Update display...
     glutPostRedisplay();
@@ -342,15 +373,11 @@ int main(int argc, char **argv)
     // START MY SETUP
     // --------------------
 
-    std::string bonefile = "test.bones";
+    bonefile = "test.bones";
+    skeleton = readSkeleton(bonefile);
 
-    std::ifstream file(bonefile.c_str());
-
-    std::string line;
-    while (std::getline(file, line))
-        readBone(line, skeleton);
-
-    anim = readAnimation("testanim.anim");
+    // TODO support this someway
+    //anim = readAnimation("testanim.anim");
 
     // --------------------
     // END MY SETUP
@@ -358,6 +385,19 @@ int main(int argc, char **argv)
 
     glutMainLoop();
     return 0;             /* ANSI C requires main to return int. */
+}
+
+std::map<std::string, Bone *> readSkeleton(const std::string &filename)
+{
+    std::map<std::string, Bone*> skeleton;
+
+    std::ifstream file(filename.c_str());
+
+    std::string line;
+    while (std::getline(file, line))
+        readBone(line, skeleton);
+
+    return skeleton;
 }
 
 void renderBone(Bone *bone)
@@ -381,7 +421,7 @@ void renderBone(Bone *bone)
     glTranslatef(bone->length, 0, 0);
 
     // Draw a cube for ease of posing
-    if (drawCubes)
+    if (editMode)
     {
         glm::vec4 ndc_coord(0.f, 0.f, 0.f, 1.f);
         ndc_coord = getModelViewProjectionMatrix() * ndc_coord;
@@ -613,7 +653,19 @@ void setPose(std::map<std::string, Bone*> &skeleton,
     setPose(skeleton, kf.bones);
 }
 
-void dumpPose(const Keyframe &kf)
+void dumpAnimation(const Animation &anim)
+{
+    // print header
+    std::cout << "outputted_anim\n" << anim.numframes << "\n\n";
+
+    for (size_t i = 0; i < anim.keyframes.size(); i++)
+    {
+        dumpKeyframe(anim.keyframes[i]);
+        std::cout << '\n';
+    }
+}
+
+void dumpKeyframe(const Keyframe &kf)
 {
     std::map<std::string, BoneFrame>::const_iterator it;
     std::cout << "KEYFRAME " << kf.frame << '\n';
