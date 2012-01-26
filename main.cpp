@@ -56,11 +56,11 @@ void dumpKeyframe(const Keyframe &kf);
 void dumpAnimation(const Animation &anim);
 void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton);
 Animation readAnimation(const std::string &filename);
-void setPose(std::map<std::string, Bone*> &skeleton,
-        const Animation &anim, int frame);
+Keyframe getPose(const Animation &anim, int frame);
 void setPose(std::map<std::string, Bone*> &skeleton,
         const std::map<std::string, BoneFrame> &pose);
 void renderCube();
+void padKeyframe(Keyframe &kf, const std::map<std::string, Bone*> &skeleton);
 std::map<std::string, Bone*> readSkeleton(const std::string &filename);
 
 int windowWidth = 800, windowHeight = 600;
@@ -92,7 +92,10 @@ void redraw(void)
 
     // Set the bone pose
     glMatrixMode(GL_MODELVIEW);
-    setPose(skeleton, curframe.bones);
+    Keyframe kf = curframe;
+    if (!editMode)
+        kf = getPose(curanim, framenum);
+    setPose(skeleton, kf.bones);
 
     renderBone(skeleton["root"]);
 
@@ -104,7 +107,8 @@ void reshape(int width, int height)
     windowWidth = width;
     windowHeight = height;
     
-    if( width <= 0 || height <= 0 ) return;
+    if (width <= 0 || height <= 0)
+        return;
     
     ui->WindowX() = width;
     ui->WindowY() = height;
@@ -324,6 +328,8 @@ void keyboard(GLubyte key, GLint x, GLint y)
     if (key == 'p')
     {
         curframe.frame = framenum;
+        padKeyframe(curframe, skeleton);
+
         curanim.keyframes.push_back(curframe);
         curanim.numframes = std::max(curanim.numframes, framenum);
         std::cout << "pushed a keyframe\n";
@@ -345,6 +351,13 @@ int main(int argc, char **argv)
 {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
+
+    if (argc == 2)
+    {
+        std::cout << "Reading animation from " << argv[1] << '\n';
+        curanim = readAnimation(argv[1]);
+        editMode = false;
+    }
 
     glutCreateWindow("kiss_particle demo");
     glutDisplayFunc(redraw);
@@ -629,15 +642,11 @@ Keyframe interpolate(const Keyframe &a, const Keyframe &b, int fnum)
     return ret;
 }
 
-void setPose(std::map<std::string, Bone*> &skeleton,
-        const Animation &anim, int frame)
+Keyframe getPose(const Animation &anim, int frame)
 {
     // Just stick on the last frame, no repeat for now
     if (frame >= anim.numframes)
-    {
-        setPose(skeleton, anim.keyframes.back().bones);
-        return;
-    }
+        return anim.keyframes.back();
 
     // Find the frames to interpolate
     size_t i;
@@ -649,8 +658,8 @@ void setPose(std::map<std::string, Bone*> &skeleton,
     assert(i < anim.keyframes.size());
 
     Keyframe kf = interpolate(anim.keyframes[i - 1], anim.keyframes[i], frame);
-
-    setPose(skeleton, kf.bones);
+    
+    return kf;
 }
 
 void dumpAnimation(const Animation &anim)
@@ -694,4 +703,22 @@ void renderCube()
     glDrawArrays(GL_QUADS, 0, 24);
 
     glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+void padKeyframe(Keyframe &kf, const std::map<std::string, Bone*> &skeleton)
+{
+    std::map<std::string, Bone*>::const_iterator it;
+    for (it = skeleton.begin(); it != skeleton.end(); it++)
+    {
+        const std::string &bname = it->first;
+        if (kf.bones.find(bname) == kf.bones.end())
+        {
+            const Bone *bone = it->second;
+            BoneFrame bf;
+            bf.length = bone->length;
+            bf.rot = bone->rot;
+
+            kf.bones[bname] = bf;
+        }
+    }
 }
