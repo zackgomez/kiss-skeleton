@@ -130,6 +130,33 @@ glm::mat4 getModelViewProjectionMatrix()
     return pmat * mvmat;
 }
 
+glm::mat4 getBoneMatrix(const Bone* bone)
+{
+    // base case, null bone, identity transform
+    if (!bone) return glm::mat4(1.f);
+
+    // The transform for this bone
+    glm::mat4 transform = glm::translate(glm::mat4(1.f), bone->pos);
+    transform = glm::rotate(transform, bone->rot[3], glm::vec3(bone->rot));
+    transform = glm::translate(transform, glm::vec3(bone->length, 0.f, 0.f));
+
+    glm::mat4 parentTransform = getBoneMatrix(bone->parent);
+
+    return parentTransform * transform;
+}
+
+void setBoneTipPosition(Bone *bone, const glm::vec3 &worldPos)
+{
+    // First get the parent transform, we can't adjust that
+    glm::mat4 parentTransform = getBoneMatrix(bone->parent);
+    glm::mat4 inverseParentTransform = glm::inverse(parentTransform);
+
+    glm::vec4 pt(worldPos, 1.f);
+    pt = inverseParentTransform * pt; pt /= pt.w;
+
+    std::cout << "difference between parent tip and desired tip: " << pt.x << ' ' << pt.y << ' ' << pt.z << '\n';
+}
+
 void mouse(int button, int state, int x, int y)
 {
     if (button == GLUT_RIGHT_BUTTON && drawCubes)
@@ -159,7 +186,15 @@ void mouse(int button, int state, int x, int y)
                 }
             }
 
-            //std::cout << "Selected bone: " << selectedBone << '\n';
+            if (!selectedBone.empty())
+            {
+                //glm::vec4 pt(0.f, 0.f, 0.f, 1.f);
+                //glm::mat4 fullTransform = getModelViewProjectionMatrix() * getBoneMatrix(skeleton[selectedBone]);
+                //pt = fullTransform * pt; pt /= pt.w;
+                std::cout << "Selected bone: " << selectedBone << '\n';
+                //std::cout << "Click screen pos: " << screen_pos.x << ' ' << screen_pos.y << '\n';
+                //std::cout << "Bone ndc from getBoneMatrix: " << pt.x << ' ' << pt.y << ' ' << pt.z << '\n';
+            }
         }
         if (state == GLUT_UP)
             selectedBone = "";
@@ -183,7 +218,9 @@ void motion(int x, int y)
         glm::vec4 world_pos = inverseMat * glm::vec4(screen_pos, selectedBonePos.z, 1.f);
         world_pos /= world_pos.w;
 
-        std::cout << "world pos: " << world_pos.x << ' ' << world_pos.y << ' ' << world_pos.z << '\n';
+        setBoneTipPosition(skeleton[selectedBone], glm::vec3(world_pos));
+
+        //std::cout << "world pos: " << world_pos.x << ' ' << world_pos.y << ' ' << world_pos.z << '\n';
     }
     else
     {
