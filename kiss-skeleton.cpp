@@ -4,8 +4,7 @@
 #include <sstream>
 #include <fstream>
 #include <glm/gtc/matrix_transform.hpp>
-
-void renderCube();
+#include <glm/gtc/type_ptr.hpp>
 
 Skeleton::Skeleton() :
     renderer_(new SimpleBoneRenderer())
@@ -20,11 +19,12 @@ Skeleton::~Skeleton()
         delete it->second;
 }
 
-void Skeleton::render() const
+void Skeleton::render(const glm::mat4 &transform) const
 {
     assert(bones_.size() > 0);
     assert(bones_.find("root") != bones_.end());
-    renderBone(bones_.find("root")->second);
+
+    renderBone(transform, bones_.find("root")->second);
 }
 
 void Skeleton::dumpPose(std::ostream &os) const
@@ -56,7 +56,7 @@ void Skeleton::setBoneTipPosition(const std::string &bonename, const glm::vec3 &
     Bone *bone = bones_[bonename];
 
     // First get the parent transform, we can't adjust that
-    glm::mat4 parentTransform = getBoneMatrix(bone->parent);
+    glm::mat4 parentTransform = getFullBoneMatrix(bone->parent);
     glm::mat4 inverseParentTransform = glm::inverse(parentTransform);
     glm::mat4 curBoneTransform = glm::translate(glm::mat4(1.f), bone->pos);
     curBoneTransform = glm::rotate(curBoneTransform, bone->rot.w, glm::vec3(bone->rot));
@@ -172,27 +172,23 @@ void Skeleton::readSkeleton(const std::string &filename)
     refPose_ = getPose();
 }
 
-void Skeleton::renderBone(const Bone *bone) const
+void Skeleton::renderBone(const glm::mat4 &parentTransform, const Bone *bone) const
 {
     if (!bone)
         return;
 
-    glPushMatrix();
-
-    glTranslatef(bone->pos[0], bone->pos[1], bone->pos[2]);
-    glRotatef(bone->rot[3], bone->rot[0], bone->rot[1], bone->rot[2]);
+    glm::mat4 curTransform = glm::translate(parentTransform, bone->pos);
+    curTransform = glm::rotate(curTransform, bone->rot[3], glm::vec3(bone->rot));
 
     // render the bone using the current renderer
-    (*renderer_)(bone);
+    (*renderer_)(curTransform, bone);
 
     // Move to the tip of the bone
-    glTranslatef(bone->length, 0, 0);
+    curTransform = glm::translate(curTransform, glm::vec3(bone->length, 0.f, 0.f));
 
     // Render children recursively
     for (size_t i = 0; i < bone->children.size(); i++)
-        renderBone(bone->children[i]);
-
-    glPopMatrix();
+        renderBone(curTransform, bone->children[i]);
 }
 
 void Skeleton::printBone(const Bone *cur, std::ostream &os) const
@@ -210,7 +206,7 @@ void Skeleton::printBone(const Bone *cur, std::ostream &os) const
 
 glm::mat4 Skeleton::getBoneMatrix(const Bone* bone) const
 {
-    // base case, null bone, identity transform
+    // null bone, identity transform
     if (!bone) return glm::mat4(1.f);
 
     // The transform for this bone
@@ -218,7 +214,16 @@ glm::mat4 Skeleton::getBoneMatrix(const Bone* bone) const
     transform = glm::rotate(transform, bone->rot[3], glm::vec3(bone->rot));
     transform = glm::translate(transform, glm::vec3(bone->length, 0.f, 0.f));
 
-    glm::mat4 parentTransform = getBoneMatrix(bone->parent);
+    return transform;
+}
+
+glm::mat4 Skeleton::getFullBoneMatrix(const Bone* bone) const
+{
+    // base case, null bone, identity transform
+    if (!bone) return glm::mat4(1.f);
+
+    glm::mat4 transform = getBoneMatrix(bone);
+    glm::mat4 parentTransform = getFullBoneMatrix(bone->parent);
 
     return parentTransform * transform;
 }
@@ -235,13 +240,19 @@ void Skeleton::setDefaultRenderer()
     renderer_ = new SimpleBoneRenderer();
 }
 
-void SimpleBoneRenderer::operator() (const Bone* bone)
+void SimpleBoneRenderer::operator() (const glm::mat4 &transform, const Bone* bone)
 {
+    glPushMatrix();
+    
+    glMultMatrixf(glm::value_ptr(transform));
+
     glBegin(GL_LINES);
         glColor3f(0, 1, 0);
         glVertex3f(0, 0, 0);
         glColor3f(1, 0, 0);
         glVertex3f(bone->length, 0, 0);
     glEnd();
+
+    glPopMatrix();
 }
 

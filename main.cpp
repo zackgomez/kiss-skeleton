@@ -14,7 +14,7 @@
 
 struct EditBoneRenderer : public BoneRenderer
 {
-    virtual void operator() (const Bone *bone);
+    virtual void operator() (const glm::mat4 &transform, const Bone *bone);
 
     std::map<std::string, glm::vec3> boneNDC;
     std::string selectedBone;
@@ -33,6 +33,8 @@ EditBoneRenderer *ebrenderer = NULL;
 glm::vec3 selectedBonePos;
 bool editMode = Skeleton::ANGLE_MODE;
 
+glm::mat4 viewMatrix(1.f);
+
 Skeleton *skeleton;
 Animation curanim;
 int framenum = 0;
@@ -48,15 +50,19 @@ void redraw(void)
     // Apply the camera transformation.
     ui->ApplyViewingTransformation();
 
-    // Set the bone pose
+    glGetFloatv(GL_MODELVIEW_MATRIX, glm::value_ptr(viewMatrix));
+
     glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    // Set the bone pose
     if (!ebrenderer)
     {
         Keyframe kf = getPose(curanim, framenum);
         skeleton->setPose(kf.bones);
     }
 
-    skeleton->render();
+    skeleton->render(viewMatrix);
 
     glutSwapBuffers();
 }
@@ -90,13 +96,17 @@ glm::vec2 getNDC(int x, int y)
     return screen_pos;
 }
 
+glm::mat4 getProjectionMatrix()
+{
+    glm::mat4 pmat;
+    glGetFloatv(GL_PROJECTION_MATRIX, glm::value_ptr(pmat));
+
+    return pmat;
+}
+
 glm::mat4 getModelViewProjectionMatrix()
 {
-    glm::mat4 pmat, mvmat;
-    glGetFloatv(GL_PROJECTION_MATRIX, glm::value_ptr(pmat));
-    glGetFloatv(GL_MODELVIEW_MATRIX,  glm::value_ptr(mvmat));
-
-    return pmat * mvmat;
+    return getProjectionMatrix() * viewMatrix;
 }
 
 void mouse(int button, int state, int x, int y)
@@ -466,8 +476,11 @@ void renderCube()
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void EditBoneRenderer::operator() (const Bone *bone)
+void EditBoneRenderer::operator() (const glm::mat4 &transform, const Bone *bone)
 {
+    glPushMatrix();
+    glMultMatrixf(glm::value_ptr(transform));
+
     glBegin(GL_LINES);
         glColor3f(0, 1, 0);
         glVertex3f(0, 0, 0);
@@ -483,15 +496,18 @@ void EditBoneRenderer::operator() (const Bone *bone)
 
     // Record the ndc coords of the bone tip
     glm::vec4 ndc_coord(bone->length, 0.f, 0.f, 1.f);
-    ndc_coord = getModelViewProjectionMatrix() * ndc_coord;
+    ndc_coord = getProjectionMatrix() * transform * ndc_coord;
     ndc_coord /= ndc_coord.w;
     boneNDC[bone->name] = glm::vec3(ndc_coord);
 
     // Render cube at tip
+    // TODO make a helper that takes a transform to do this
     glPushMatrix();
     glTranslatef(bone->length, 0, 0);
     glScalef(cube_scale, cube_scale, cube_scale);
     renderCube();
+    glPopMatrix();
+
     glPopMatrix();
 }
 

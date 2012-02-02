@@ -47,14 +47,12 @@ struct Animation
 // 
 struct BoneRenderer
 {
-    // TODO make this take in the "bone space" transform for the passed bone
-    // this function should not make any lasting transforms.
-    virtual void operator() (const Bone* b) = 0;
+    virtual void operator() (const glm::mat4 &transform, const Bone* b) = 0;
 };
 
 struct SimpleBoneRenderer : public BoneRenderer
 {
-    virtual void operator() (const Bone* b);
+    virtual void operator() (const glm::mat4 &transform, const Bone* b);
 };
 
 class Skeleton
@@ -63,8 +61,7 @@ public:
     Skeleton();
     ~Skeleton();
 
-    // TODO take parent transform as glm::mat4
-    void render() const;
+    void render(const glm::mat4 &transform) const;
     void dumpPose(std::ostream &os) const;
 
     // Parameters to setBoneTipPosition mode type
@@ -86,10 +83,11 @@ public:
 private:
     std::map<std::string, Bone *> bones_;
 
-    void renderBone(const Bone *bone) const;
+    void renderBone(const glm::mat4 &parentTransform, const Bone *bone) const;
     void readBone(const std::string &bonestr);
     void printBone(const Bone *bone, std::ostream &os) const;
     glm::mat4 getBoneMatrix(const Bone* bone) const;
+    glm::mat4 getFullBoneMatrix(const Bone* bone) const;
 
     BoneRenderer *renderer_;
 
