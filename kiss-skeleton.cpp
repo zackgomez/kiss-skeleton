@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <glm/gtc/matrix_transform.hpp>
 
 void renderCube();
 
@@ -46,6 +47,64 @@ void Skeleton::setPose(const std::map<std::string, BoneFrame> &pose)
         bone->length = bframe.length;
         bone->rot = bframe.rot;
     }
+}
+
+void Skeleton::setBoneTipPosition(const std::string &bonename, const glm::vec3 &targetPos,
+        int mode)
+{
+    assert(bones_.find(bonename) != bones_.end());
+    Bone *bone = bones_[bonename];
+
+    // First get the parent transform, we can't adjust that
+    glm::mat4 parentTransform = getBoneMatrix(bone->parent);
+    glm::mat4 inverseParentTransform = glm::inverse(parentTransform);
+    glm::mat4 curBoneTransform = glm::translate(glm::mat4(1.f), bone->pos);
+    curBoneTransform = glm::rotate(curBoneTransform, bone->rot.w, glm::vec3(bone->rot));
+    curBoneTransform = glm::translate(curBoneTransform, glm::vec3(bone->length, 0.f, 0.f));
+
+    glm::vec4 pt(targetPos, 1.f);
+    pt = inverseParentTransform * pt; pt /= pt.w;
+
+
+    glm::vec3 rotvec = glm::vec3(bone->rot);
+    float angle = bone->rot.w;
+    float length = bone->length;
+    if (mode == ANGLE_MODE)
+    {
+        // vector in direction of point of bone length (parent space)
+        glm::vec3 ptvec = glm::normalize(glm::vec3(pt)) * bone->length;
+
+        // Get the angle between untransformed and target vector (parent space)
+        angle = 180.f / M_PI * acos(glm::dot(glm::normalize(ptvec), glm::vec3(1, 0, 0)));
+        // Create an orthogonal vector to rotate around (parent space)
+        rotvec = glm::cross(glm::vec3(1, 0, 0), glm::normalize(ptvec));
+    }
+    else if (mode == LENGTH_MODE)
+    {
+        glm::vec4 parentpt = parentTransform * glm::vec4(0, 0, 0, 1);
+        parentpt /= parentpt.w;
+
+        length = glm::length(glm::vec3(pt - parentpt));
+        std::cout << "new length (distance): " << length << '\n';
+        /*
+        // curpt is in parent space
+        glm::vec4 curpt = curBoneTransform * glm::vec4(0, 0, 0, 1);
+        curpt /= curpt.w;
+
+        // a dot b / mag b [proj a onto b]
+        length = glm::dot(glm::vec3(curpt), worldPos) / glm::length(curpt);
+
+        std::cout << "length: " << bone->length << " |curpt|: " << glm::length(glm::vec3(curpt))
+            << " new length (projection): " << length << '\n';
+        */
+    }
+    else
+    {
+        assert(false && "unknown bone transform mode");
+    }
+
+    bone->rot = glm::vec4(rotvec, angle);
+    bone->length = length;
 }
 
 Keyframe Skeleton::getPose() const
@@ -147,6 +206,21 @@ void Skeleton::printBone(const Bone *cur, std::ostream &os) const
         printBone(cur->children[i], os);
 }
 
+glm::mat4 Skeleton::getBoneMatrix(const Bone* bone) const
+{
+    // base case, null bone, identity transform
+    if (!bone) return glm::mat4(1.f);
+
+    // The transform for this bone
+    glm::mat4 transform = glm::translate(glm::mat4(1.f), bone->pos);
+    transform = glm::rotate(transform, bone->rot[3], glm::vec3(bone->rot));
+    transform = glm::translate(transform, glm::vec3(bone->length, 0.f, 0.f));
+
+    glm::mat4 parentTransform = getBoneMatrix(bone->parent);
+
+    return parentTransform * transform;
+}
+
 void Skeleton::setBoneRenderer(BoneRenderer *br)
 {
     delete renderer_;
@@ -168,3 +242,4 @@ void SimpleBoneRenderer::operator() (const Bone* bone)
         glVertex3f(bone->length, 0, 0);
     glEnd();
 }
+

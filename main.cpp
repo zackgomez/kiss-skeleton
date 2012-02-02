@@ -31,7 +31,7 @@ int windowWidth = 800, windowHeight = 600;
 
 EditBoneRenderer *ebrenderer = NULL;
 glm::vec3 selectedBonePos;
-bool angleMode = true; // if false then length mode
+bool editMode = Skeleton::ANGLE_MODE;
 
 Skeleton *skeleton;
 Animation curanim;
@@ -99,83 +99,6 @@ glm::mat4 getModelViewProjectionMatrix()
     return pmat * mvmat;
 }
 
-glm::mat4 getBoneMatrix(const Bone* bone)
-{
-    // base case, null bone, identity transform
-    if (!bone) return glm::mat4(1.f);
-
-    // The transform for this bone
-    glm::mat4 transform = glm::translate(glm::mat4(1.f), bone->pos);
-    transform = glm::rotate(transform, bone->rot[3], glm::vec3(bone->rot));
-    transform = glm::translate(transform, glm::vec3(bone->length, 0.f, 0.f));
-
-    glm::mat4 parentTransform = getBoneMatrix(bone->parent);
-
-    return parentTransform * transform;
-}
-
-
-void rotate(float &x, float &y, float angle){
-    float c=cos(angle),s=sin(angle);
-    float x0 = x;
-    x = x*c - s*y;
-    y = x0*s + x0*y;
-}
-
-void setBoneTipPosition(Bone *bone, const glm::vec3 &worldPos, Keyframe *pose)
-{
-    // First get the parent transform, we can't adjust that
-    glm::mat4 parentTransform = getBoneMatrix(bone->parent);
-    glm::mat4 inverseParentTransform = glm::inverse(parentTransform);
-    glm::mat4 curBoneTransform = glm::translate(glm::mat4(1.f), bone->pos);
-    curBoneTransform = glm::rotate(curBoneTransform, bone->rot.w, glm::vec3(bone->rot));
-    curBoneTransform = glm::translate(curBoneTransform, glm::vec3(bone->length, 0.f, 0.f));
-
-    glm::vec4 pt(worldPos, 1.f);
-    pt = inverseParentTransform * pt; pt /= pt.w;
-
-
-    glm::vec3 rotvec = glm::vec3(bone->rot);
-    float angle = bone->rot.w;
-    float length = bone->length;
-    if (angleMode)
-    {
-        // vector in direction of point of bone length (parent space)
-        glm::vec3 ptvec = glm::normalize(glm::vec3(pt)) * bone->length;
-
-        // Get the angle between untransformed and target vector (parent space)
-        angle = 180.f / M_PI * acos(glm::dot(glm::normalize(ptvec), glm::vec3(1, 0, 0)));
-        // Create an orthogonal vector to rotate around (parent space)
-        rotvec = glm::cross(glm::vec3(1, 0, 0), glm::normalize(ptvec));
-    }
-    else
-    {
-        glm::vec4 parentpt = parentTransform * glm::vec4(0, 0, 0, 1);
-        parentpt /= parentpt.w;
-
-        length = glm::length(glm::vec3(pt - parentpt));
-        std::cout << "new length (distance): " << length << '\n';
-        /*
-        // curpt is in parent space
-        glm::vec4 curpt = curBoneTransform * glm::vec4(0, 0, 0, 1);
-        curpt /= curpt.w;
-
-        // a dot b / mag b [proj a onto b]
-        length = glm::dot(glm::vec3(curpt), worldPos) / glm::length(curpt);
-
-        std::cout << "length: " << bone->length << " |curpt|: " << glm::length(glm::vec3(curpt))
-            << " new length (projection): " << length << '\n';
-        */
-    }
-
-    // Set the current frame
-    BoneFrame cur;
-    cur.rot = glm::vec4(rotvec, angle);
-    cur.length = length;
-
-    pose->bones[bone->name] = cur;
-}
-
 void mouse(int button, int state, int x, int y)
 {
     if (button == GLUT_RIGHT_BUTTON && ebrenderer)
@@ -234,8 +157,7 @@ void motion(int x, int y)
         glm::vec4 world_pos = inverseMat * glm::vec4(screen_pos, selectedBonePos.z, 1.f);
         world_pos /= world_pos.w;
 
-        // TODO
-        //setBoneTipPosition(skeleton[selectedBone], glm::vec3(world_pos), &curframe);
+        skeleton->setBoneTipPosition(ebrenderer->selectedBone, glm::vec3(world_pos), editMode);
 
         glutPostRedisplay();
     }
@@ -287,16 +209,16 @@ void keyboard(GLubyte key, GLint x, GLint y)
     }
 
     if (key == 'l')
-        angleMode = false;
+        editMode = Skeleton::LENGTH_MODE;
     if (key == 'a')
-        angleMode = true;
+        editMode = Skeleton::ANGLE_MODE;
 
     if (key == 'p')
     {
         Keyframe kf = skeleton->getPose();
         kf.frame = framenum;
 
-        curanim.keyframes.push_back(skeleton->getPose());
+        curanim.keyframes.push_back(kf);
         curanim.numframes = std::max(curanim.numframes, framenum);
         std::cout << "pushed a keyframe @ " << framenum << '\n';
     }

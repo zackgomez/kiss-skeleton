@@ -68,11 +68,11 @@ public:
     void dumpPose(std::ostream &os) const;
 
     // Parameters to setBoneTipPosition mode type
-    static const int ANGLE_MODE  = 0;
-    static const int LENGTH_MODE = 0;
+    static const int ANGLE_MODE  = 1;
+    static const int LENGTH_MODE = 2;
 
     void setPose(const std::map<std::string, BoneFrame> &pose);
-    void setBoneTipPosition(const std::string bone, const glm::vec3 &targetPos,
+    void setBoneTipPosition(const std::string &bone, const glm::vec3 &targetPos,
             int mode);
     void resetPose();
 
@@ -89,6 +89,7 @@ private:
     void renderBone(const Bone *bone) const;
     void readBone(const std::string &bonestr);
     void printBone(const Bone *bone, std::ostream &os) const;
+    glm::mat4 getBoneMatrix(const Bone* bone) const;
 
     BoneRenderer *renderer_;
 
