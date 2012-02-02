@@ -128,7 +128,7 @@ Keyframe Skeleton::getPose() const
 
 void Skeleton::resetPose()
 {
-    // TODO setPose(referencePose_);
+    setPose(refPose_.bones);
 }
 
 void Skeleton::readBone(const std::string &bonestr)
@@ -168,6 +168,8 @@ void Skeleton::readSkeleton(const std::string &filename)
     std::string line;
     while (std::getline(file, line))
         readBone(line);
+
+    refPose_ = getPose();
 }
 
 void Skeleton::renderBone(const Bone *bone) const

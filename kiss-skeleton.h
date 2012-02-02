@@ -93,6 +93,8 @@ private:
 
     BoneRenderer *renderer_;
 
+    Keyframe refPose_;
+
     // TODO add reference pose, computed in readSkeleton
 };
 
