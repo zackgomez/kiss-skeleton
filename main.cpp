@@ -10,74 +10,32 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "uistate.h"
+#include "kiss-skeleton.h"
 
-struct Bone
+struct EditBoneRenderer : public BoneRenderer
 {
-    std::string name;
-    float length;
+    virtual void operator() (const Bone *bone);
 
-    glm::vec3 pos;
-    // x,y,z, angle
-    glm::vec4 rot;
-    
-    Bone *parent;
-    std::vector<Bone*> children;
-
-    Bone(const std::string &nm, float l,
-            const glm::vec3 &relpos, const glm::vec4 &relrot,
-            Bone *parnt) :
-        name(nm), length(l), pos(relpos), rot(relrot),
-        parent(parnt)
-    { }
+    std::map<std::string, glm::vec3> boneNDC;
+    std::string selectedBone;
 };
 
-struct BoneFrame
-{
-    float length;
-    glm::vec4 rot;
-};
-
-struct Keyframe
-{
-    int frame;
-    std::map<std::string, BoneFrame> bones;
-};
-
-struct Animation
-{
-    std::string name;
-    int numframes;
-    std::vector<Keyframe> keyframes;
-};
-
-void renderBone(Bone *bone);
 void printBone(Bone *skeleton);
 void dumpKeyframe(const Keyframe &kf);
 void dumpAnimation(const Animation &anim);
-void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton);
 Animation readAnimation(const std::string &filename);
 Keyframe getPose(const Animation &anim, int frame);
-void setPose(std::map<std::string, Bone*> &skeleton,
-        const std::map<std::string, BoneFrame> &pose);
 void renderCube();
-void padKeyframe(Keyframe &kf, const std::map<std::string, Bone*> &skeleton);
-std::map<std::string, Bone*> readSkeleton(const std::string &filename);
 
 int windowWidth = 800, windowHeight = 600;
 
-bool editMode = true;
-std::string selectedBone = "";
+EditBoneRenderer *ebrenderer = NULL;
 glm::vec3 selectedBonePos;
 bool angleMode = true; // if false then length mode
 
-std::string bonefile;
-std::map<std::string, Bone*> skeleton;
-Keyframe curframe;
+Skeleton *skeleton;
 Animation curanim;
 int framenum = 0;
-
-// the ndc positions of each bone tip cube
-std::map<std::string, glm::vec3> bone_ndc;
 
 // Peter's mystical ui controller for arcball transformation and stuff
 static UIState *ui;
@@ -92,12 +50,13 @@ void redraw(void)
 
     // Set the bone pose
     glMatrixMode(GL_MODELVIEW);
-    Keyframe kf = curframe;
-    if (!editMode)
-        kf = getPose(curanim, framenum);
-    setPose(skeleton, kf.bones);
+    if (!ebrenderer)
+    {
+        Keyframe kf = getPose(curanim, framenum);
+        skeleton->setPose(kf.bones);
+    }
 
-    renderBone(skeleton["root"]);
+    skeleton->render();
 
     glutSwapBuffers();
 }
@@ -219,45 +178,42 @@ void setBoneTipPosition(Bone *bone, const glm::vec3 &worldPos, Keyframe *pose)
 
 void mouse(int button, int state, int x, int y)
 {
-    if (button == GLUT_RIGHT_BUTTON && editMode)
+    if (button == GLUT_RIGHT_BUTTON && ebrenderer)
     {
         if (state == GLUT_DOWN)
         {
-            selectedBone = "";
-
+            ebrenderer->selectedBone = "";
             glm::vec2 screen_pos = getNDC(x, y);
-            //std::cout << "Click screen pos: " << screen_pos.x << ' ' << screen_pos.y << '\n';
+            std::cout << "Click screen pos: " << screen_pos.x << ' ' << screen_pos.y << '\n';
 
+            std::cout << "bone ndc size: " << ebrenderer->boneNDC.size() << '\n';
             std::map<std::string, glm::vec3>::const_iterator it;
             float closestZ = HUGE_VAL;
-            for (it = bone_ndc.begin(); it != bone_ndc.end(); it++)
+            for (it = ebrenderer->boneNDC.begin(); it != ebrenderer->boneNDC.end(); it++)
             {
                 std::string name = it->first;
                 glm::vec3 bonepos = it->second;
 
                 const float select_dist = 0.01f;
 
-                if (glm::length(glm::vec2(bonepos) - screen_pos) < select_dist &&
-                    bonepos.z < closestZ)
+                float dist = glm::length(glm::vec2(bonepos) - screen_pos);
+
+                std::cout << name << " bone ndc coord: " << bonepos.x << ' ' << bonepos.y << '\n';
+
+                if (dist < select_dist && bonepos.z < closestZ)
                 {
-                    selectedBone = name;
+                    ebrenderer->selectedBone = name;
                     closestZ = bonepos.z;
                     selectedBonePos = bonepos;
                 }
             }
-
-            if (!selectedBone.empty())
-            {
-                //glm::vec4 pt(0.f, 0.f, 0.f, 1.f);
-                //glm::mat4 fullTransform = getModelViewProjectionMatrix() * getBoneMatrix(skeleton[selectedBone]);
-                //pt = fullTransform * pt; pt /= pt.w;
-                std::cout << "Selected bone: " << selectedBone << '\n';
-                //std::cout << "Click screen pos: " << screen_pos.x << ' ' << screen_pos.y << '\n';
-                //std::cout << "Bone ndc from getBoneMatrix: " << pt.x << ' ' << pt.y << ' ' << pt.z << '\n';
-            }
         }
         if (state == GLUT_UP)
-            selectedBone = "";
+        {
+            ebrenderer->selectedBone = "";
+        }
+
+        std::cout << "Selected bone: " << ebrenderer->selectedBone << '\n';
 
         glutPostRedisplay();
     }
@@ -270,7 +226,7 @@ void mouse(int button, int state, int x, int y)
 
 void motion(int x, int y)
 {
-    if (!selectedBone.empty())
+    if (ebrenderer && !ebrenderer->selectedBone.empty())
     {
         glm::vec2 screen_pos = getNDC(x, y);
         glm::mat4 inverseMat = glm::inverse(getModelViewProjectionMatrix());
@@ -278,11 +234,10 @@ void motion(int x, int y)
         glm::vec4 world_pos = inverseMat * glm::vec4(screen_pos, selectedBonePos.z, 1.f);
         world_pos /= world_pos.w;
 
-        setBoneTipPosition(skeleton[selectedBone], glm::vec3(world_pos), &curframe);
+        // TODO
+        //setBoneTipPosition(skeleton[selectedBone], glm::vec3(world_pos), &curframe);
 
         glutPostRedisplay();
-
-        //std::cout << "world pos: " << world_pos.x << ' ' << world_pos.y << ' ' << world_pos.z << '\n';
     }
     else
     {
@@ -298,7 +253,7 @@ void keyboard(GLubyte key, GLint x, GLint y)
         exit(0);
     if (key == 'd')
     {
-        printBone(skeleton["root"]);
+        skeleton->dumpPose(std::cout);
         dumpAnimation(curanim);
     }
     if (key == '+')
@@ -318,7 +273,18 @@ void keyboard(GLubyte key, GLint x, GLint y)
         std::cout << "framenum: " << framenum << '\n';
     }
     if (key == 'e')
-        editMode = !editMode;
+    {
+        if (ebrenderer)
+        {
+            skeleton->setDefaultRenderer();
+            ebrenderer = NULL;
+        }
+        else
+        {
+            ebrenderer = new EditBoneRenderer();
+            skeleton->setBoneRenderer(ebrenderer);
+        }
+    }
 
     if (key == 'l')
         angleMode = false;
@@ -327,20 +293,17 @@ void keyboard(GLubyte key, GLint x, GLint y)
 
     if (key == 'p')
     {
-        curframe.frame = framenum;
-        padKeyframe(curframe, skeleton);
+        Keyframe kf = skeleton->getPose();
+        kf.frame = framenum;
 
-        curanim.keyframes.push_back(curframe);
+        curanim.keyframes.push_back(skeleton->getPose());
         curanim.numframes = std::max(curanim.numframes, framenum);
-        std::cout << "pushed a keyframe\n";
+        std::cout << "pushed a keyframe @ " << framenum << '\n';
     }
 
     if (key == 'r')
     {
-        curframe.frame = 0;
-        curframe.bones.clear();
-
-        skeleton = readSkeleton(bonefile);
+        skeleton->resetPose();
     }
 
     // Update display...
@@ -356,7 +319,6 @@ int main(int argc, char **argv)
     {
         std::cout << "Reading animation from " << argv[1] << '\n';
         curanim = readAnimation(argv[1]);
-        editMode = false;
     }
 
     glutCreateWindow("kiss_particle demo");
@@ -386,11 +348,9 @@ int main(int argc, char **argv)
     // START MY SETUP
     // --------------------
 
-    bonefile = "test.bones";
-    skeleton = readSkeleton(bonefile);
-
-    // TODO support this someway
-    //anim = readAnimation("testanim.anim");
+    std::string bonefile = "test.bones";
+    skeleton = new Skeleton();
+    skeleton->readSkeleton(bonefile);
 
     // --------------------
     // END MY SETUP
@@ -398,130 +358,6 @@ int main(int argc, char **argv)
 
     glutMainLoop();
     return 0;             /* ANSI C requires main to return int. */
-}
-
-std::map<std::string, Bone *> readSkeleton(const std::string &filename)
-{
-    std::map<std::string, Bone*> skeleton;
-
-    std::ifstream file(filename.c_str());
-
-    std::string line;
-    while (std::getline(file, line))
-        readBone(line, skeleton);
-
-    return skeleton;
-}
-
-void renderBone(Bone *bone)
-{
-    if (!bone)
-        return;
-
-    glPushMatrix();
-
-    glTranslatef(bone->pos[0], bone->pos[1], bone->pos[2]);
-    glRotatef(bone->rot[3], bone->rot[0], bone->rot[1], bone->rot[2]);
-
-    glBegin(GL_LINES);
-        glColor3f(0, 1, 0);
-        glVertex3f(0, 0, 0);
-        glColor3f(1, 0, 0);
-        glVertex3f(bone->length, 0, 0);
-    glEnd();
-
-    // Move to the tip of the bone
-    glTranslatef(bone->length, 0, 0);
-
-    // Draw a cube for ease of posing
-    if (editMode)
-    {
-        glm::vec4 ndc_coord(0.f, 0.f, 0.f, 1.f);
-        ndc_coord = getModelViewProjectionMatrix() * ndc_coord;
-        ndc_coord /= ndc_coord.w;
-
-        bone_ndc[bone->name] = glm::vec3(ndc_coord);
-
-        //std::cout << bone->name << " screen coord: " << ndc_coord.x << ' ' << ndc_coord.y << ' ' << ndc_coord.z << ' ' << ndc_coord.w << '\n';
-
-        float cube_scale = bone->length / 10.f;
-        if (bone->name == selectedBone)
-            glColor3f(0.2, 0.2, 0.8);
-        else
-            glColor3f(0.5, 0.5, 0.5);
-        glPushMatrix();
-        glScalef(cube_scale, cube_scale, cube_scale);
-        renderCube();
-        glPopMatrix();
-    }
-
-    for (size_t i = 0; i < bone->children.size(); i++)
-    {
-        renderBone(bone->children[i]);
-    }
-
-    glPopMatrix();
-}
-
-void readBone(const std::string &bonestr, std::map<std::string, Bone*> &skeleton)
-{
-    std::stringstream ss(bonestr);
-    std::string name, parentname;
-    float x, y, z, a, rotx, roty, rotz, length;
-    ss >> name >> x >> y >> z >> rotx >> roty >> rotz >> a >> length >> parentname;
-    if (!ss)
-    {
-        std::cerr << "Could not read bone from string: '" << bonestr << "'\n";
-        assert(false);
-    }
-
-    Bone *parent;
-    if (parentname == "NULL")
-    {
-        assert(name == "root");
-        parent = NULL;
-    }
-    else
-    {
-        assert(skeleton.find(parentname) != skeleton.end());
-        parent = skeleton[parentname];
-    }
-
-    Bone *newbone = new Bone(name, length, glm::vec3(x, y, z), glm::vec4(rotx, roty, rotz, a), parent);
-    if (parent)
-        parent->children.push_back(newbone);
-    skeleton[name] = newbone;
-}
-
-
-void printBone(Bone *cur)
-{
-    if (cur == NULL)
-        return;
-
-    std::cout << cur->name << ' ' << cur->pos[0] << ' ' << cur->pos[1] << ' ' << cur->pos[2] << ' '
-        << cur->rot[0] << ' ' << cur->rot[1] << ' ' << cur->rot[2] << ' ' << cur->rot[3] << ' '
-        << cur->length << ' ' << (cur->parent == NULL ? "NULL" : cur->parent->name) << '\n';
-
-    for (size_t i = 0; i < cur->children.size(); i++)
-        printBone(cur->children[i]);
-}
-
-void setPose(std::map<std::string, Bone*> &skeleton,
-        const std::map<std::string, BoneFrame> &pose)
-{
-    std::map<std::string, BoneFrame>::const_iterator it;
-    for (it = pose.begin(); it != pose.end(); it++)
-    {
-        const std::string name = it->first;
-        const BoneFrame bframe = it->second;
-
-        assert(skeleton.find(name) != skeleton.end());
-
-        Bone *bone = skeleton[name];
-        bone->length = bframe.length;
-        bone->rot = bframe.rot;
-    }
 }
 
 BoneFrame readBoneFrame(std::istream &is)
@@ -644,6 +480,9 @@ Keyframe interpolate(const Keyframe &a, const Keyframe &b, int fnum)
 
 Keyframe getPose(const Animation &anim, int frame)
 {
+    // safety check
+    if (anim.keyframes.empty())
+        return Keyframe();
     // Just stick on the last frame, no repeat for now
     if (frame >= anim.numframes)
         return anim.keyframes.back();
@@ -705,20 +544,32 @@ void renderCube()
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void padKeyframe(Keyframe &kf, const std::map<std::string, Bone*> &skeleton)
+void EditBoneRenderer::operator() (const Bone *bone)
 {
-    std::map<std::string, Bone*>::const_iterator it;
-    for (it = skeleton.begin(); it != skeleton.end(); it++)
-    {
-        const std::string &bname = it->first;
-        if (kf.bones.find(bname) == kf.bones.end())
-        {
-            const Bone *bone = it->second;
-            BoneFrame bf;
-            bf.length = bone->length;
-            bf.rot = bone->rot;
+    glBegin(GL_LINES);
+        glColor3f(0, 1, 0);
+        glVertex3f(0, 0, 0);
+        glColor3f(1, 0, 0);
+        glVertex3f(bone->length, 0, 0);
+    glEnd();
 
-            kf.bones[bname] = bf;
-        }
-    }
+    float cube_scale = bone->length / 10.f;
+    if (bone->name == selectedBone)
+        glColor3f(0.2, 0.2, 0.8);
+    else
+        glColor3f(0.5, 0.5, 0.5);
+
+    // Record the ndc coords of the bone tip
+    glm::vec4 ndc_coord(bone->length, 0.f, 0.f, 1.f);
+    ndc_coord = getModelViewProjectionMatrix() * ndc_coord;
+    ndc_coord /= ndc_coord.w;
+    boneNDC[bone->name] = glm::vec3(ndc_coord);
+
+    // Render cube at tip
+    glPushMatrix();
+    glTranslatef(bone->length, 0, 0);
+    glScalef(cube_scale, cube_scale, cube_scale);
+    renderCube();
+    glPopMatrix();
 }
+
