@@ -64,21 +64,23 @@ public:
     void render(const glm::mat4 &transform) const;
     void dumpPose(std::ostream &os) const;
 
+    void setBoneRenderer(BoneRenderer *renderer);
+    void setDefaultRenderer();
+
+    void setPose(const std::map<std::string, BoneFrame> &pose);
+    void readSkeleton(const std::string &filename);
+
+
+    // Function used for editing
+    void setBoneTipPosition(const std::string &bone, const glm::vec3 &targetPos,
+            int mode);
+    void resetPose();
     // Parameters to setBoneTipPosition mode type
     static const int ANGLE_MODE  = 1;
     static const int LENGTH_MODE = 2;
 
-    void setPose(const std::map<std::string, BoneFrame> &pose);
-    void setBoneTipPosition(const std::string &bone, const glm::vec3 &targetPos,
-            int mode);
-    void resetPose();
-
     Keyframe getPose() const;
 
-    void readSkeleton(const std::string &filename);
-
-    void setBoneRenderer(BoneRenderer *renderer);
-    void setDefaultRenderer();
 
 private:
     std::map<std::string, Bone *> bones_;
@@ -91,8 +93,7 @@ private:
 
     BoneRenderer *renderer_;
 
+    // Original, reference pose, stored when read in from file
     Keyframe refPose_;
-
-    // TODO add reference pose, computed in readSkeleton
 };
 
