@@ -33,6 +33,8 @@ EditBoneRenderer *ebrenderer = NULL;
 glm::vec3 selectedBonePos;
 bool editMode = Skeleton::ANGLE_MODE;
 
+std::fstream posefile;
+
 glm::mat4 viewMatrix(1.f);
 
 Skeleton *skeleton;
@@ -185,8 +187,14 @@ void keyboard(GLubyte key, GLint x, GLint y)
         exit(0);
     if (key == 'd')
     {
-        skeleton->dumpPose(std::cout);
-        dumpAnimation(curanim);
+        std::string posename;
+        std::cout << "Enter pose name: ";
+        std::cin >> posename;
+
+        posefile << posename << '\n';
+        skeleton->dumpPose(posefile);
+        posefile << "\n\n";
+        //dumpAnimation(curanim);
     }
     if (key == '+')
     {
@@ -242,6 +250,11 @@ void keyboard(GLubyte key, GLint x, GLint y)
     glutPostRedisplay();
 }
 
+void cleanup()
+{
+    posefile.close();
+}
+
 int main(int argc, char **argv)
 {
     glutInit(&argc, argv);
@@ -283,6 +296,10 @@ int main(int argc, char **argv)
     std::string bonefile = "test.bones";
     skeleton = new Skeleton();
     skeleton->readSkeleton(bonefile);
+
+    posefile.open("charlie.poses", std::fstream::app | std::fstream::out);
+
+    atexit(cleanup);
 
     // --------------------
     // END MY SETUP
