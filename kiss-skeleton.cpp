@@ -6,6 +6,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+const int Skeleton::ANGLE_MODE  = 1;
+const int Skeleton::LENGTH_MODE = 2;
+
 Skeleton::Skeleton() :
     renderer_(new SimpleBoneRenderer())
 {

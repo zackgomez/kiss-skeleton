@@ -31,7 +31,7 @@ int windowWidth = 800, windowHeight = 600;
 
 EditBoneRenderer *ebrenderer = NULL;
 glm::vec3 selectedBonePos;
-bool editMode = Skeleton::ANGLE_MODE;
+int editMode;
 
 std::fstream posefile;
 
@@ -46,6 +46,7 @@ static UIState *ui;
 
 void redraw(void)
 {
+    //std::cout << "Edit mode: " << editMode << '\n';
     // Now render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -119,9 +120,9 @@ void mouse(int button, int state, int x, int y)
         {
             ebrenderer->selectedBone = "";
             glm::vec2 screen_pos = getNDC(x, y);
-            std::cout << "Click screen pos: " << screen_pos.x << ' ' << screen_pos.y << '\n';
+            //std::cout << "Click screen pos: " << screen_pos.x << ' ' << screen_pos.y << '\n';
 
-            std::cout << "bone ndc size: " << ebrenderer->boneNDC.size() << '\n';
+            //std::cout << "bone ndc size: " << ebrenderer->boneNDC.size() << '\n';
             std::map<std::string, glm::vec3>::const_iterator it;
             float closestZ = HUGE_VAL;
             for (it = ebrenderer->boneNDC.begin(); it != ebrenderer->boneNDC.end(); it++)
@@ -133,7 +134,7 @@ void mouse(int button, int state, int x, int y)
 
                 float dist = glm::length(glm::vec2(bonepos) - screen_pos);
 
-                std::cout << name << " bone ndc coord: " << bonepos.x << ' ' << bonepos.y << '\n';
+                //std::cout << name << " bone ndc coord: " << bonepos.x << ' ' << bonepos.y << '\n';
 
                 if (dist < select_dist && bonepos.z < closestZ)
                 {
@@ -148,7 +149,7 @@ void mouse(int button, int state, int x, int y)
             ebrenderer->selectedBone = "";
         }
 
-        std::cout << "Selected bone: " << ebrenderer->selectedBone << '\n';
+        //std::cout << "Selected bone: " << ebrenderer->selectedBone << '\n';
 
         glutPostRedisplay();
     }
@@ -296,6 +297,7 @@ int main(int argc, char **argv)
     std::string bonefile = "test.bones";
     skeleton = new Skeleton();
     skeleton->readSkeleton(bonefile);
+    editMode = Skeleton::ANGLE_MODE;
 
     posefile.open("charlie.poses", std::fstream::app | std::fstream::out);
 

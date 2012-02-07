@@ -76,8 +76,8 @@ public:
             int mode);
     void resetPose();
     // Parameters to setBoneTipPosition mode type
-    static const int ANGLE_MODE  = 1;
-    static const int LENGTH_MODE = 2;
+    static const int ANGLE_MODE;
+    static const int LENGTH_MODE;
 
     Keyframe getPose() const;
 
