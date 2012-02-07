@@ -57,10 +57,12 @@ void Skeleton::setBoneTipPosition(const std::string &bonename, const glm::vec3 &
 
     // First get the parent transform, we can't adjust that
     glm::mat4 parentTransform = getFullBoneMatrix(bone->parent);
+    // Add to the parent transform the position of the current bone
+    parentTransform = glm::translate(parentTransform, glm::vec3(bone->pos));
     glm::mat4 inverseParentTransform = glm::inverse(parentTransform);
-    glm::mat4 curBoneTransform = glm::translate(glm::mat4(1.f), bone->pos);
-    curBoneTransform = glm::rotate(curBoneTransform, bone->rot.w, glm::vec3(bone->rot));
-    curBoneTransform = glm::translate(curBoneTransform, glm::vec3(bone->length, 0.f, 0.f));
+    //glm::mat4 curBoneTransform = glm::translate(glm::mat4(1.f), bone->pos);
+    //curBoneTransform = glm::rotate(curBoneTransform, bone->rot.w, glm::vec3(bone->rot));
+    //curBoneTransform = glm::translate(curBoneTransform, glm::vec3(bone->length, 0.f, 0.f));
 
     glm::vec4 pt(targetPos, 1.f);
     pt = inverseParentTransform * pt; pt /= pt.w;
