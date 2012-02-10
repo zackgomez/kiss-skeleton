@@ -33,7 +33,7 @@ void Skeleton::render(const glm::mat4 &transform) const
 void Skeleton::dumpPose(std::ostream &os) const
 {
     assert(bones_.find("root") != bones_.end());
-    printBone(bones_.find("root")->second, os);
+    printBoneFrame(bones_.find("root")->second, os);
 }
 
 void Skeleton::setPose(const std::map<std::string, BoneFrame> &pose)
@@ -207,6 +207,18 @@ void Skeleton::printBone(const Bone *cur, std::ostream &os) const
 
     for (size_t i = 0; i < cur->children.size(); i++)
         printBone(cur->children[i], os);
+}
+
+void Skeleton::printBoneFrame(const Bone *cur, std::ostream &os) const
+{
+    if (cur == NULL)
+        return;
+
+    os  << cur->name << ' ' << cur->length << ' '
+        << cur->rot[0] << ' ' << cur->rot[1] << ' ' << cur->rot[2] << ' ' << cur->rot[3] << '\n';
+
+    for (size_t i = 0; i < cur->children.size(); i++)
+        printBoneFrame(cur->children[i], os);
 }
 
 glm::mat4 Skeleton::getBoneMatrix(const Bone* bone) const

@@ -194,7 +194,7 @@ void keyboard(GLubyte key, GLint x, GLint y)
 
         posefile << posename << '\n';
         skeleton->dumpPose(posefile);
-        posefile << "\n\n";
+        posefile << "\n";
         //dumpAnimation(curanim);
     }
     if (key == '+')
