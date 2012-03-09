@@ -185,8 +185,12 @@ void Skeleton::renderBone(const glm::mat4 &parentTransform, const Bone *bone) co
     glm::mat4 curTransform = glm::translate(parentTransform, bone->pos);
     curTransform = glm::rotate(curTransform, bone->rot[3], glm::vec3(bone->rot));
 
-    // render the bone using the current renderer
-    (*renderer_)(curTransform, bone);
+    // Don't render root bone!
+    if (bone->name != "root")
+    {
+        // render the bone using the current renderer
+        (*renderer_)(curTransform, bone);
+    }
 
     // Move to the tip of the bone
     curTransform = glm::translate(curTransform, glm::vec3(bone->length, 0.f, 0.f));
