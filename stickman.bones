@@ -1,13 +1,18 @@
-root 0 0.1 0 0 0 1 -90 0.00 NULL
-backh 0 0 0 0 0 1 180 0.25 root
-rarmh 0 -0.1 0 0 0 -1 90 0.16 backh
-rarml 0 0 0 0 0 1 0 0.16 rarmh
-larmh 0 0.1 0 0 0 1 90 0.16 backh
-larml 0 0 0 0 0 1 0 0.16 larmh
-head 0.05 0 0 0 0 1 0 0.15 backh
-nose -0.075 0 0 0 -1 0 90 0.05 head
-backl 0 0 0 0 0 1 0 0.2 root
-rleg 0.05 0.1 0 0 0 1 20 0.25 backl
-rshin 0 0 0 0 -7.31967e-05 -0.25 15 0.25 rleg
-lleg 0.05 -0.1 0 0 0 1 -20 0.25 backl
-lshin 0 0 0 0 -7.89945e-05 0.25 15 0.25 lleg
+root  0 0 0    0 0 1 0    1.0 255
+
+backh 0 1 0    0 0 1 0    1.0 0
+
+rarmh 1 0 0    0 0 1 0    1.0 1
+rarml 1 0 0    0 0 1 0    1.0 2
+larmh -1 0 0   0 0 1 0    1.0 1
+larml -1 0 0   0 0 1 0    1.0 4
+
+head  0 1 0    0 0 1 0    1.0 1
+nose  0 0 0.4    0 0 1 0    1.0 6
+
+backl 0 -1 0   0 0 1 0    1.0 0
+
+rleg  0.5 -1 0   0 0 1 0    1.0 8
+rshin 0.5 -1 0   0 0 1 0    1.0 9
+lleg  -0.5 -1 0  0 0 1 0    1.0 8
+lshin -0.5 -1 0  0 0 1 0    1.0 11

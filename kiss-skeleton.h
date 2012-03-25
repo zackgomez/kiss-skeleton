@@ -4,57 +4,41 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-
 struct Bone
 {
-    std::string name;
-    float length;
-
+    glm::vec4 rot; // x,y,z, angle
     glm::vec3 pos;
-    // x,y,z, angle
-    glm::vec4 rot;
+    float scale;
+
+    std::string name;
     
-    Bone *parent;
-    std::vector<Bone*> children;
+    int parent;
 
-    Bone(const std::string &nm, float l,
-            const glm::vec3 &relpos, const glm::vec4 &relrot,
-            Bone *parnt) :
-        name(nm), length(l), pos(relpos), rot(relrot),
-        parent(parnt)
-    { }
+    glm::mat4 worldTransform;
 };
 
-struct BoneFrame
+struct BonePose
 {
-    float length;
-    glm::vec3 pos;
     glm::vec4 rot;
+    glm::vec3 pos;
+    float scale;
 };
 
-struct Keyframe
+struct SkeletonPose
 {
-    int frame;
-    std::map<std::string, BoneFrame> bones;
-};
-
-struct Animation
-{
-    std::string name;
-    int numframes;
-    std::vector<Keyframe> keyframes;
+    std::vector<BonePose*> poses;
 };
 
 // Callback functor for render each bone.
 // 
 struct BoneRenderer
 {
-    virtual void operator() (const glm::mat4 &transform, const Bone* b) = 0;
+    virtual void operator() (const glm::mat4 &transform, const Bone* b, const std::vector<Bone*> bones) = 0;
 };
 
 struct SimpleBoneRenderer : public BoneRenderer
 {
-    virtual void operator() (const glm::mat4 &transform, const Bone* b);
+    virtual void operator() (const glm::mat4 &transform, const Bone* b, const std::vector<Bone*> bones);
 };
 
 class Skeleton
@@ -64,38 +48,20 @@ public:
     ~Skeleton();
 
     void render(const glm::mat4 &transform) const;
-    void dumpPose(std::ostream &os) const;
 
     void setBoneRenderer(BoneRenderer *renderer);
     void setDefaultRenderer();
 
-    void setPose(const std::map<std::string, BoneFrame> &pose);
     void readSkeleton(const std::string &filename);
 
-
-    // Function used for editing
-    void setBoneTipPosition(const std::string &bone, const glm::vec3 &targetPos,
-            int mode);
-    void resetPose();
-    // Parameters to setBoneTipPosition mode type
-    static const int ANGLE_MODE;
-    static const int LENGTH_MODE;
-
-    Keyframe getPose() const;
-
-
 private:
-    std::map<std::string, Bone *> bones_;
-
-    void renderBone(const glm::mat4 &parentTransform, const Bone *bone) const;
-    void readBone(const std::string &bonestr);
-    void printBoneFrame(const Bone *cur, std::ostream &os) const;
-    glm::mat4 getBoneMatrix(const Bone* bone) const;
-    glm::mat4 getFullBoneMatrix(const Bone* bone) const;
+    std::vector<Bone*> bones_;
 
     BoneRenderer *renderer_;
 
-    // Original, reference pose, stored when read in from file
-    Keyframe refPose_;
+    void setWorldTransform(Bone* bone);
+    void readBone(const std::string &bonestr);
+
+    static const int ROOT_PARENT;
 };
 
