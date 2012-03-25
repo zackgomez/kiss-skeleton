@@ -4,7 +4,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-struct Bone
+struct Joint
 {
     glm::vec4 rot; // x,y,z, angle
     glm::vec3 pos;
@@ -12,12 +12,12 @@ struct Bone
 
     std::string name;
     
-    int parent;
+    unsigned parent;
 
     glm::mat4 worldTransform;
 };
 
-struct BonePose
+struct JointPose
 {
     glm::vec4 rot;
     glm::vec3 pos;
@@ -26,19 +26,19 @@ struct BonePose
 
 struct SkeletonPose
 {
-    std::vector<BonePose*> poses;
+    std::vector<JointPose*> poses;
 };
 
 // Callback functor for render each bone.
 // 
 struct BoneRenderer
 {
-    virtual void operator() (const glm::mat4 &transform, const Bone* b, const std::vector<Bone*> bones) = 0;
+    virtual void operator() (const glm::mat4 &transform, const Joint* b, const std::vector<Joint*> joints) = 0;
 };
 
 struct SimpleBoneRenderer : public BoneRenderer
 {
-    virtual void operator() (const glm::mat4 &transform, const Bone* b, const std::vector<Bone*> bones);
+    virtual void operator() (const glm::mat4 &transform, const Joint* b, const std::vector<Joint*> joints);
 };
 
 class Skeleton
@@ -55,13 +55,13 @@ public:
     void readSkeleton(const std::string &filename);
 
 private:
-    std::vector<Bone*> bones_;
+    std::vector<Joint*> joints_;
 
     BoneRenderer *renderer_;
 
-    void setWorldTransform(Bone* bone);
-    void readBone(const std::string &bonestr);
+    void setWorldTransform(Joint* bone);
+    void readJoint(const std::string &jointstr);
 
-    static const int ROOT_PARENT;
+    static const unsigned ROOT_PARENT;
 };
 

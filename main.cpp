@@ -17,12 +17,13 @@ static int windowWidth = 800, windowHeight = 600;
 static glm::mat4 viewMatrix(1.f);
 static Skeleton *skeleton;
 static UIState *ui; // ui controller
+static std::string selectedJoint;
+static std::map<std::string, glm::vec3> jointNDC;
+static const float selectThresh = 0.02f;
 
 struct EditBoneRenderer : public BoneRenderer
 {
-    virtual void operator() (const glm::mat4 &transform, const Bone* b);
-
-    std::string selected;
+    virtual void operator() (const glm::mat4 &transform, const Joint* b, const std::vector<Joint*> joints);
 };
 
 void redraw(void)
@@ -61,8 +62,36 @@ void reshape(int width, int height)
 
 void mouse(int button, int state, int x, int y)
 {
-    // Just pass it on to the ui controller.
-    ui->MouseFunction(button, state, x, y);
+    if (button == GLUT_RIGHT_BUTTON)
+    {
+        if (state == GLUT_DOWN)
+        {
+            glm::vec2 screencoord((float)x / windowWidth, (float)y / windowHeight);
+            screencoord -= glm::vec2(0.5f);
+            screencoord *= 2.f;
+            screencoord.y = -screencoord.y;
+
+            // Find closest joint
+            float nearest = HUGE_VAL;
+            for (std::map<std::string, glm::vec3>::const_iterator it = jointNDC.begin(); it != jointNDC.end(); it++)
+            {
+                float dist = glm::length(screencoord - glm::vec2(it->second));
+                if (dist < selectThresh && it->second.z < nearest)
+                {
+                    selectedJoint = it->first;
+                    nearest = it->second.z;
+                }
+            }
+        }
+        else
+            selectedJoint = "";
+    }
+    else
+    {
+        // Just pass it on to the ui controller.
+        ui->MouseFunction(button, state, x, y);
+    }
+
     glutPostRedisplay();
 }
 
@@ -117,6 +146,7 @@ int main(int argc, char **argv)
     std::string bonefile = "stickman.bones";
     skeleton = new Skeleton();
     skeleton->readSkeleton(bonefile);
+    skeleton->setBoneRenderer(new EditBoneRenderer());
 
     // --------------------
     // END MY SETUP
@@ -124,5 +154,69 @@ int main(int argc, char **argv)
 
     glutMainLoop();
     return 0;             /* ANSI C requires main to return int. */
+}
+
+static GLfloat cube_verts[] = {
+    1,1,1,    -1,1,1,   -1,-1,1,  1,-1,1,        // v0-v1-v2-v3
+    1,1,1,    1,-1,1,   1,-1,-1,  1,1,-1,        // v0-v3-v4-v5
+    1,1,1,    1,1,-1,   -1,1,-1,  -1,1,1,        // v0-v5-v6-v1
+    -1,1,1,   -1,1,-1,  -1,-1,-1, -1,-1,1,    // v1-v6-v7-v2
+    -1,-1,-1, 1,-1,-1,  1,-1,1,   -1,-1,1,    // v7-v4-v3-v2
+    1,-1,-1,  -1,-1,-1, -1,1,-1,  1,1,-1};   // v4-v7-v6-v5
+
+static void renderCube()
+{
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(3, GL_FLOAT, 0, cube_verts);
+
+    glDrawArrays(GL_QUADS, 0, 24);
+
+    glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* joint,
+        const std::vector<Joint*> joints)
+{
+    // Draw cube
+    glLoadMatrixf(glm::value_ptr(glm::scale(transform * joint->worldTransform,
+                    glm::vec3(0.08f))));
+    if (joint->name == selectedJoint)
+        glColor3f(0.2f, 0.2f, 0.8f);
+    else
+        glColor3f(1, 1, 1);
+    renderCube();
+
+    // Record NDC coordinates
+    glm::mat4 ptrans; glGetFloatv(GL_PROJECTION_MATRIX, glm::value_ptr(ptrans));
+    glm::mat4 fullTransform = ptrans * transform * joint->worldTransform;
+    glm::vec4 jointndc(0,0,0,1);
+    jointndc = fullTransform * jointndc;
+    jointndc /= jointndc.w;
+    jointNDC[joint->name] = glm::vec3(jointndc);
+    std::cout << "Joint NDC: " << joint->name << " @ " << jointndc.x << ' '
+        << jointndc.y << ' ' << jointndc.z << ' ' << jointndc.w << '\n';
+
+    // No "bone" to draw for root
+    if (joint->parent == 255)
+        return;
+
+    glLoadMatrixf(glm::value_ptr(transform));
+
+    glm::mat4 parentTransform = joints[joint->parent]->worldTransform;
+    glm::mat4 boneTransform = joint->worldTransform;
+
+    glm::vec4 start(0, 0, 0, 1), end(0, 0, 0, 1);
+    start = parentTransform * start;
+    start /= start.w;
+    end = boneTransform * end;
+    end /= end.w;
+
+    glBegin(GL_LINES);
+    glColor3f(1, 0, 0);
+    glVertex4fv(&start.x);
+
+    glColor3f(0, 1, 0);
+    glVertex4fv(&end.x);
+    glEnd();
 }
 
