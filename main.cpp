@@ -294,7 +294,7 @@ int main(int argc, char **argv)
     // START MY SETUP
     // --------------------
 
-    std::string bonefile = "test.bones";
+    std::string bonefile = "stickman.bones";
     skeleton = new Skeleton();
     skeleton->readSkeleton(bonefile);
     editMode = Skeleton::ANGLE_MODE;
