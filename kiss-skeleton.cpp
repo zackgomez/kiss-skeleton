@@ -49,6 +49,7 @@ void Skeleton::setPose(const std::map<std::string, BoneFrame> &pose)
         Bone *bone = bones_[name];
         bone->length = bframe.length;
         bone->rot = bframe.rot;
+        bone->pos = bframe.pos;
     }
 }
 
@@ -124,6 +125,7 @@ Keyframe Skeleton::getPose() const
         BoneFrame bf;
         bf.length = bone->length;
         bf.rot = bone->rot;
+        bf.pos = bone->pos;
 
         kf.bones[bname] = bf;
     }
@@ -200,25 +202,13 @@ void Skeleton::renderBone(const glm::mat4 &parentTransform, const Bone *bone) co
         renderBone(curTransform, bone->children[i]);
 }
 
-void Skeleton::printBone(const Bone *cur, std::ostream &os) const
-{
-    if (cur == NULL)
-        return;
-
-    os  << cur->name << ' ' << cur->pos[0] << ' ' << cur->pos[1] << ' ' << cur->pos[2] << ' '
-        << cur->rot[0] << ' ' << cur->rot[1] << ' ' << cur->rot[2] << ' ' << cur->rot[3] << ' '
-        << cur->length << ' ' << (cur->parent == NULL ? "NULL" : cur->parent->name) << '\n';
-
-    for (size_t i = 0; i < cur->children.size(); i++)
-        printBone(cur->children[i], os);
-}
-
 void Skeleton::printBoneFrame(const Bone *cur, std::ostream &os) const
 {
     if (cur == NULL)
         return;
 
     os  << cur->name << ' ' << cur->length << ' '
+        << cur->pos[0] << ' ' << cur->pos[1] << ' ' << cur->pos[2] << ' '
         << cur->rot[0] << ' ' << cur->rot[1] << ' ' << cur->rot[2] << ' ' << cur->rot[3] << '\n';
 
     for (size_t i = 0; i < cur->children.size(); i++)

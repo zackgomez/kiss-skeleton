@@ -314,7 +314,10 @@ int main(int argc, char **argv)
 BoneFrame readBoneFrame(std::istream &is)
 {
     BoneFrame bf;
-    is >> bf.length >> bf.rot.x >> bf.rot.y >> bf.rot.z >> bf.rot[3];
+    is >> bf.length
+       >> bf.pos.x >> bf.pos.y >> bf.pos.z
+       >> bf.rot.x >> bf.rot.y >> bf.rot.z >> bf.rot[3];
+
     if (!is)
     {
         std::cerr << "Unable to read BoneFrame\n";

@@ -28,6 +28,7 @@ struct Bone
 struct BoneFrame
 {
     float length;
+    glm::vec3 pos;
     glm::vec4 rot;
 };
 
@@ -88,7 +89,6 @@ private:
 
     void renderBone(const glm::mat4 &parentTransform, const Bone *bone) const;
     void readBone(const std::string &bonestr);
-    void printBone(const Bone *bone, std::ostream &os) const;
     void printBoneFrame(const Bone *cur, std::ostream &os) const;
     glm::mat4 getBoneMatrix(const Bone* bone) const;
     glm::mat4 getFullBoneMatrix(const Bone* bone) const;
