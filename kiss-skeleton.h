@@ -54,6 +54,10 @@ public:
 
     void readSkeleton(const std::string &filename);
 
+    const Joint* getJoint(const std::string &name) const;
+    const Joint* getJoint(unsigned index) const;
+    void setPose(const std::string& name, const JointPose *pose);
+
 private:
     std::vector<Joint*> joints_;
 

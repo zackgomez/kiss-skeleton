@@ -72,6 +72,41 @@ void Skeleton::readSkeleton(const std::string &filename)
     }
 }
 
+const Joint* Skeleton::getJoint(const std::string &name) const
+{
+    for (size_t i = 0; i < joints_.size(); i++)
+        if (joints_[i]->name == name)
+            return joints_[i];
+    assert(false && "Joint not found");
+    return NULL;
+}
+
+const Joint* Skeleton::getJoint(unsigned index) const
+{
+    assert(index < joints_.size());
+    return joints_[index];
+}
+
+void Skeleton::setPose(const std::string &name, const JointPose *pose)
+{
+    size_t i;
+    // first find the joint and update it
+    for (i = 0; i < joints_.size(); i++)
+    {
+        if (joints_[i]->name == name)
+        {
+            joints_[i]->rot = pose->rot;
+            joints_[i]->pos = pose->pos;
+            joints_[i]->scale = pose->scale;
+            break;
+        }
+    }
+    // Then update the global transforms for it and all joints that might
+    // depend on it
+    for (; i < joints_.size(); i++)
+        setWorldTransform(joints_[i]);
+}
+
 void Skeleton::setBoneRenderer(BoneRenderer *br)
 {
     delete renderer_;

@@ -21,6 +21,10 @@ static std::string selectedJoint;
 static std::map<std::string, glm::vec3> jointNDC;
 static const float selectThresh = 0.02f;
 
+// Functions
+glm::mat4 getModelviewMatrix();
+glm::mat4 getProjectionMatrix();
+
 struct EditBoneRenderer : public BoneRenderer
 {
     virtual void operator() (const glm::mat4 &transform, const Joint* b, const std::vector<Joint*> joints);
@@ -97,8 +101,37 @@ void mouse(int button, int state, int x, int y)
 
 void motion(int x, int y)
 {
-    // Just pass it on to the ui controller.
-    ui->MotionFunction(x, y);
+    if (!selectedJoint.empty())
+    {
+        const Joint* joint = skeleton->getJoint(selectedJoint);
+        float length = glm::length(joint->pos);
+        glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+
+        glm::vec2 screenpos =
+            (glm::vec2((float)x / windowWidth, (float)(windowHeight - y) / windowHeight)
+            - 0.5f) * 2.f;
+        glm::vec4 mouseParentPos(screenpos, jointNDC[selectedJoint].z, 1);
+        mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
+        mouseParentPos /= mouseParentPos.w;
+
+        std::cout << "Mouse pos: " << mouseParentPos.x << ' ' << mouseParentPos.y << ' ' << mouseParentPos.z << '\n';
+        std::cout << "Joint pos: " << joint->pos.x << ' ' << joint->pos.y << ' ' << joint->pos.z << '\n';
+        std::cout << '\n';
+
+        glm::vec3 newPos = length * glm::normalize(glm::vec3(mouseParentPos));
+
+        JointPose pose;
+        pose.rot = joint->rot;
+        pose.scale = joint->scale;
+        pose.pos = newPos;
+        skeleton->setPose(selectedJoint, &pose);
+    }
+    else
+    {
+        // Just pass it on to the ui controller.
+        ui->MotionFunction(x, y);
+    }
+
     glutPostRedisplay();
 }
 
@@ -187,14 +220,12 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     renderCube();
 
     // Record NDC coordinates
-    glm::mat4 ptrans; glGetFloatv(GL_PROJECTION_MATRIX, glm::value_ptr(ptrans));
+    glm::mat4 ptrans = getProjectionMatrix();
     glm::mat4 fullTransform = ptrans * transform * joint->worldTransform;
     glm::vec4 jointndc(0,0,0,1);
     jointndc = fullTransform * jointndc;
     jointndc /= jointndc.w;
     jointNDC[joint->name] = glm::vec3(jointndc);
-    std::cout << "Joint NDC: " << joint->name << " @ " << jointndc.x << ' '
-        << jointndc.y << ' ' << jointndc.z << ' ' << jointndc.w << '\n';
 
     // No "bone" to draw for root
     if (joint->parent == 255)
@@ -220,3 +251,15 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     glEnd();
 }
 
+glm::mat4 getProjectionMatrix()
+{
+    glm::mat4 pmat;
+    glGetFloatv(GL_PROJECTION_MATRIX, glm::value_ptr(pmat));
+    return pmat;
+}
+glm::mat4 getModelviewMatrix()
+{
+    glm::mat4 viewMatrix;
+    glGetFloatv(GL_MODELVIEW_MATRIX, glm::value_ptr(viewMatrix));
+    return viewMatrix;
+}
