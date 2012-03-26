@@ -21,7 +21,13 @@ static std::string selectedJoint;
 static std::map<std::string, glm::vec3> jointNDC;
 static const float selectThresh = 0.02f;
 
+static bool alterLength = false;
+static bool renderJointAxis = true;
+
 // Functions
+void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord);
+void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord);
+void renderAxes(const glm::mat4 &worldTransform);
 glm::mat4 getModelviewMatrix();
 glm::mat4 getProjectionMatrix();
 
@@ -99,32 +105,48 @@ void mouse(int button, int state, int x, int y)
     glutPostRedisplay();
 }
 
+void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord)
+{
+    float length = glm::length(joint->pos);
+    glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+
+    glm::vec4 mouseParentPos(ndcCoord, 1.f);
+    mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
+    mouseParentPos /= mouseParentPos.w;
+
+    glm::vec3 newPos = glm::vec3(mouseParentPos);
+    if (!alterLength && joint->parent != 255)
+        newPos = length * glm::normalize(glm::vec3(mouseParentPos));
+
+    JointPose pose;
+    pose.rot = joint->rot;
+    pose.scale = joint->scale;
+    pose.pos = newPos;
+    skeleton->setPose(selectedJoint, &pose);
+}
+
+void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord)
+{
+    glm::vec4 localCoord = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * joint->worldTransform) * glm::vec4(ndcCoord, 1);
+    localCoord /= localCoord.w;
+
+    glm::vec3 dir = glm::normalize(glm::vec3(localCoord));
+
+    std::cout << "Dir: " << dir.x << ' ' << dir.y << ' ' << dir.z << '\n';
+}
+
 void motion(int x, int y)
 {
     if (!selectedJoint.empty())
     {
         const Joint* joint = skeleton->getJoint(selectedJoint);
-        float length = glm::length(joint->pos);
-        glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
-
         glm::vec2 screenpos =
             (glm::vec2((float)x / windowWidth, (float)(windowHeight - y) / windowHeight)
             - 0.5f) * 2.f;
-        glm::vec4 mouseParentPos(screenpos, jointNDC[selectedJoint].z, 1);
-        mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
-        mouseParentPos /= mouseParentPos.w;
+        glm::vec3 ndcCoord(screenpos, jointNDC[selectedJoint].z);
 
-        std::cout << "Mouse pos: " << mouseParentPos.x << ' ' << mouseParentPos.y << ' ' << mouseParentPos.z << '\n';
-        std::cout << "Joint pos: " << joint->pos.x << ' ' << joint->pos.y << ' ' << joint->pos.z << '\n';
-        std::cout << '\n';
-
-        glm::vec3 newPos = length * glm::normalize(glm::vec3(mouseParentPos));
-
-        JointPose pose;
-        pose.rot = joint->rot;
-        pose.scale = joint->scale;
-        pose.pos = newPos;
-        skeleton->setPose(selectedJoint, &pose);
+        //setJointPosition(joint, ndcCoord);
+        setJointRotation(joint, ndcCoord);
     }
     else
     {
@@ -219,6 +241,9 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
         glColor3f(1, 1, 1);
     renderCube();
 
+    if (renderJointAxis && joint->name == selectedJoint)
+        renderAxes(transform * joint->worldTransform);
+
     // Record NDC coordinates
     glm::mat4 ptrans = getProjectionMatrix();
     glm::mat4 fullTransform = ptrans * transform * joint->worldTransform;
@@ -262,4 +287,24 @@ glm::mat4 getModelviewMatrix()
     glm::mat4 viewMatrix;
     glGetFloatv(GL_MODELVIEW_MATRIX, glm::value_ptr(viewMatrix));
     return viewMatrix;
+}
+
+void renderAxes(const glm::mat4 &transform)
+{
+    glm::mat4 finalTransform = glm::scale(transform, glm::vec3(0.5f));
+    glLoadMatrixf(glm::value_ptr(finalTransform));
+
+    glBegin(GL_LINES);
+    glColor3f(1.f, 0.5f, 0.5f);
+    glVertex3f(0, 0, 0);
+    glVertex3f(1, 0, 0);
+
+    glColor3f(0.5f, 1.f, 0.5f);
+    glVertex3f(0, 0, 0);
+    glVertex3f(0, 1, 0);
+
+    glColor3f(0.5f, 0.5f, 1.f);
+    glVertex3f(0, 0, 0);
+    glVertex3f(0, 0, 1);
+    glEnd();
 }
