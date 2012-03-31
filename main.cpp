@@ -420,6 +420,10 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
         p /= p.w;
         axisNDC[2] = glm::vec3(p);
     }
+    else if (editMode == ROTATION_MODE && joint->name == selectedJoint)
+    {
+        renderRotationSphere(transform * joint->worldTransform);
+    }
 
     // Record joint NDC coordinates
     glm::mat4 ptrans = getProjectionMatrix();
@@ -497,7 +501,6 @@ void renderAxes(const glm::mat4 &transform)
     tmp = transform * tmp; tmp /= tmp.w;
     glm::vec3 pos(tmp);
 
-    glm::mat4 circleTransform;
     glColor3f(1.f, 1.f, 1.f);
     renderCircle(glm::translate(glm::mat4(1.f), pos));
 }
@@ -505,7 +508,7 @@ void renderAxes(const glm::mat4 &transform)
 void renderCircle(const glm::mat4 &transform)
 {
     const float r = 0.5f;
-    const int nsegments = 25;
+    const int nsegments = 40;
 
     glLoadMatrixf(glm::value_ptr(transform));
 
@@ -518,19 +521,55 @@ void renderCircle(const glm::mat4 &transform)
 void renderHalfCircle(const glm::mat4 &transform)
 {
     const float r = 0.5f;
-    const int nsegments = 25;
+    const int nsegments = 20;
 
     glLoadMatrixf(glm::value_ptr(transform));
 
-    glBegin(GL_LINE_LOOP);
-    for (float theta = 0.f; theta < M_PI; theta += M_PI/nsegments)
+    glBegin(GL_LINE_STRIP);
+    for (float theta = 0.f; theta <= M_PI; theta += M_PI/nsegments)
         glVertex3f(r*cosf(theta), r*sinf(theta), 0.f);
     glEnd();
 }
 
 void renderRotationSphere(const glm::mat4 &transform)
 {
-    // TODO
+    glm::vec4 tmp(0,0,0,1);
+    tmp = transform * tmp; tmp /= tmp.w;
+    glm::vec3 viewPos(tmp);
+    glm::mat4 sphereTransform = glm::scale(
+            glm::translate(glm::mat4(1.f), viewPos),
+            glm::vec3(3.f));
+
+    glm::mat4 worldTransform = skeleton->getJoint(selectedJoint)->worldTransform;
+    glm::mat4 viewTransform = transform * glm::inverse(worldTransform);
+    tmp = glm::vec4(0,0,0,1);
+    tmp = worldTransform * tmp; tmp /= tmp.w;
+    glm::vec3 worldPos(tmp);
+
+    glm::mat4 arcTransform;
+    // global arc transform
+    arcTransform = viewTransform *
+        glm::scale(glm::translate(glm::mat4(1.f), worldPos), glm::vec3(2.f));
+
+
+    // Render a white enclosing circle
+    glColor3f(1.f, 1.f, 1.f);
+    renderCircle(sphereTransform);
+
+    // a vector point towards camera in NDC
+    tmp = glm::vec4(0,0,-1,0);
+    tmp = glm::inverse(getProjectionMatrix() * arcTransform) * tmp;
+
+
+    // X handle
+    glColor3f(1.0f, 0.5f, 0.5f);
+    renderHalfCircle(glm::rotate(arcTransform, 90.f, glm::vec3(0,1,0)));
+    // Y handle
+    glColor3f(0.5f, 1.0f, 0.5f);
+    renderHalfCircle(glm::rotate(arcTransform, 90.f, glm::vec3(1,0,0)));
+    // Z handle
+    glColor3f(0.5f, 0.5f, 1.0f);
+    renderHalfCircle(glm::rotate(arcTransform, 90.f, glm::vec3(0,0,1)));
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
