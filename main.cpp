@@ -135,6 +135,26 @@ void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord)
     std::cout << "Dir: " << dir.x << ' ' << dir.y << ' ' << dir.z << '\n';
 }
 
+void setJointScale(const Joint* joint, const glm::vec3 &ndcCoord)
+{
+    float length = glm::length(joint->pos);
+    glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+
+    glm::vec4 mouseParentPos(ndcCoord, 1.f);
+    mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
+    mouseParentPos /= mouseParentPos.w;
+
+    float newScale = 1.f;
+    newScale = length - glm::length(mouseParentPos);
+
+    JointPose pose;
+    pose.rot = joint->rot;
+    pose.pos = joint->pos;
+    pose.scale = joint->scale * newScale;
+    skeleton->setPose(selectedJoint, &pose);
+}
+
+
 void motion(int x, int y)
 {
     if (!selectedJoint.empty())
@@ -145,8 +165,9 @@ void motion(int x, int y)
             - 0.5f) * 2.f;
         glm::vec3 ndcCoord(screenpos, jointNDC[selectedJoint].z);
 
-        setJointPosition(joint, ndcCoord);
+        //setJointPosition(joint, ndcCoord);
         //setJointRotation(joint, ndcCoord);
+        setJointScale(joint, ndcCoord);
     }
     else
     {
