@@ -11,15 +11,19 @@
 #include <glm/gtc/type_ptr.hpp>
 #include "uistate.h"
 #include "kiss-skeleton.h"
+
 // constants
 static int windowWidth = 800, windowHeight = 600;
 static const float selectThresh = 0.02f;
+static const float axisLength = 0.5f;
+static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 
 // global vars
 static glm::mat4 viewMatrix(1.f);
 static Skeleton *skeleton;
 static UIState *ui; // ui controller
 static std::map<std::string, glm::vec3> jointNDC;
+static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
 
 // UI vars
 static std::string selectedJoint;
@@ -27,6 +31,7 @@ static bool alterLength = false;
 static bool renderJointAxis = true;
 static glm::vec2 dragStart;
 static bool dragging = false;
+static int editMode = TRANSLATION_MODE;
 
 // Functions
 glm::vec2 clickToScreenPos(int x, int y);
@@ -37,6 +42,7 @@ void renderAxes(const glm::mat4 &worldTransform);
 void renderRotationSphere(const glm::mat4 &worldTransform);
 glm::mat4 getModelviewMatrix();
 glm::mat4 getProjectionMatrix();
+std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
 
 struct EditBoneRenderer : public BoneRenderer
 {
@@ -51,7 +57,7 @@ void redraw(void)
     // Apply the camera transformation.
     ui->ApplyViewingTransformation();
 
-    glGetFloatv(GL_MODELVIEW_MATRIX, glm::value_ptr(viewMatrix));
+    viewMatrix = getModelviewMatrix();
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -94,6 +100,13 @@ void mouse(int button, int state, int x, int y)
         // Begin a drag
         dragging = true;
         dragStart = clickToScreenPos(x, y);
+
+        glm::vec3 clickNDC(dragStart, jointNDC[selectedJoint].z);
+        std::cout << "Click: " << clickNDC << '\n';
+        std::cout << "Joint: " << jointNDC[selectedJoint] << '\n';
+        std::cout << "X axis: " << axisNDC[0] << '\n';
+        std::cout << "Y axis: " << axisNDC[1] << '\n';
+        std::cout << "Z axis: " << axisNDC[2] << '\n';
     }
     // Right mouse selects and deselects bones
     else if (button == GLUT_RIGHT_BUTTON)
@@ -140,9 +153,14 @@ void motion(int x, int y)
         glm::vec2 screenpos = clickToScreenPos(x, y);
         glm::vec3 ndcCoord(screenpos, jointNDC[selectedJoint].z);
 
-        //setJointPosition(joint, ndcCoord);
-        //setJointRotation(joint, ndcCoord);
-        setJointScale(joint, ndcCoord);
+        if (editMode == TRANSLATION_MODE)
+            setJointPosition(joint, ndcCoord);
+        else if (editMode == ROTATION_MODE)
+            setJointRotation(joint, ndcCoord);
+        else if (editMode == SCALE_MODE)
+            setJointScale(joint, ndcCoord);
+        else
+            assert(false && "Unknown edit mode");
     }
     else
     {
@@ -158,6 +176,12 @@ void keyboard(GLubyte key, GLint x, GLint y)
     // Quit on ESC
     if (key == 27)
         exit(0);
+    if (key == 't')
+        editMode = TRANSLATION_MODE;
+    if (key == 'r')
+        editMode = ROTATION_MODE;
+    if (key == 's')
+        editMode = SCALE_MODE;
     // Update display...
     glutPostRedisplay();
 }
@@ -297,10 +321,32 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
         glColor3f(1, 1, 1);
     renderCube();
 
+    // Render axis (x,y,z lines) if necessary
     if (renderJointAxis && joint->name == selectedJoint)
+    {
         renderAxes(transform * joint->worldTransform);
+        // Also record the NDC coordinates
+        glm::mat4 fullTrans = glm::scale(getProjectionMatrix() * transform * joint->worldTransform,
+                glm::vec3(axisLength));
+        glm::vec4 p;
+        // x
+        p = glm::vec4(1, 0, 0, 1);
+        p = fullTrans * p;
+        p /= p.w;
+        axisNDC[0] = glm::vec3(p);
+        // y
+        p = glm::vec4(0, 1, 0, 1);
+        p = fullTrans * p;
+        p /= p.w;
+        axisNDC[1] = glm::vec3(p);
+        // z
+        p = glm::vec4(0, 0, 1, 1);
+        p = fullTrans * p;
+        p /= p.w;
+        axisNDC[2] = glm::vec3(p);
+    }
 
-    // Record NDC coordinates
+    // Record joint NDC coordinates
     glm::mat4 ptrans = getProjectionMatrix();
     glm::mat4 fullTransform = ptrans * transform * joint->worldTransform;
     glm::vec4 jointndc(0,0,0,1);
@@ -340,14 +386,22 @@ glm::mat4 getProjectionMatrix()
 }
 glm::mat4 getModelviewMatrix()
 {
-    glm::mat4 viewMatrix;
-    glGetFloatv(GL_MODELVIEW_MATRIX, glm::value_ptr(viewMatrix));
-    return viewMatrix;
+    glm::mat4 mat;
+    glGetFloatv(GL_MODELVIEW_MATRIX, glm::value_ptr(mat));
+
+    /*
+    std::cout << "Modelview matrix:\n"
+        << mat[0][0] << ' ' << mat[0][1] << ' ' << mat[0][2] << ' ' << mat[0][3] << '\n'
+        << mat[1][0] << ' ' << mat[1][1] << ' ' << mat[1][2] << ' ' << mat[1][3] << '\n'
+        << mat[2][0] << ' ' << mat[2][1] << ' ' << mat[2][2] << ' ' << mat[2][3] << '\n'
+        << mat[3][0] << ' ' << mat[3][1] << ' ' << mat[3][2] << ' ' << mat[3][3] << '\n';
+        */
+    return mat;
 }
 
 void renderAxes(const glm::mat4 &transform)
 {
-    glm::mat4 finalTransform = glm::scale(transform, glm::vec3(0.5f));
+    glm::mat4 finalTransform = glm::scale(transform, glm::vec3(axisLength));
     glLoadMatrixf(glm::value_ptr(finalTransform));
 
     glBegin(GL_LINES);
@@ -370,3 +424,8 @@ void renderRotationSphere(const glm::mat4 &transform)
     // TODO
 }
 
+std::ostream& operator<< (std::ostream& os, const glm::vec3 &v)
+{
+    os << v.x << ' ' << v.y << ' ' << v.z;
+    return os;
+}
