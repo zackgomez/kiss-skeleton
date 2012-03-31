@@ -12,22 +12,29 @@
 #include "uistate.h"
 #include "kiss-skeleton.h"
 
-// global vars
+// constants
 static int windowWidth = 800, windowHeight = 600;
+static const float selectThresh = 0.02f;
+
+// global vars
 static glm::mat4 viewMatrix(1.f);
 static Skeleton *skeleton;
 static UIState *ui; // ui controller
-static std::string selectedJoint;
 static std::map<std::string, glm::vec3> jointNDC;
-static const float selectThresh = 0.02f;
 
+// UI vars
+static std::string selectedJoint;
 static bool alterLength = false;
 static bool renderJointAxis = true;
+static glm::vec2 dragStart;
+static bool dragging = false;
 
 // Functions
+glm::vec2 clickToScreenPos(int x, int y);
 void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord);
 void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord);
 void renderAxes(const glm::mat4 &worldTransform);
+void renderRotationSphere(const glm::mat4 &worldTransform);
 glm::mat4 getModelviewMatrix();
 glm::mat4 getProjectionMatrix();
 
@@ -72,16 +79,29 @@ void reshape(int width, int height)
 
 void mouse(int button, int state, int x, int y)
 {
+    // Left button possible starts an edit
+    if (button == GLUT_LEFT_BUTTON)
+    {
+        // If button up, nothing to do...
+        if (state == GLUT_UP)
+        {
+            dragging = false;
+            return;
+        }
+        // If no joint selected, nothing to do
+        if (selectedJoint.empty()) return;
+
+        // Begin a drag
+        dragging = true;
+        dragStart = clickToScreenPos(x, y);
+    }
     // Right mouse selects and deselects bones
-    if (button == GLUT_RIGHT_BUTTON)
+    else if (button == GLUT_RIGHT_BUTTON)
     {
         if (state == GLUT_DOWN)
         {
             selectedJoint = "";
-            glm::vec2 screencoord((float)x / windowWidth, (float)y / windowHeight);
-            screencoord -= glm::vec2(0.5f);
-            screencoord *= 2.f;
-            screencoord.y = -screencoord.y;
+            glm::vec2 screencoord = clickToScreenPos(x, y);
 
             // Find closest joint
             float nearest = HUGE_VAL;
@@ -96,53 +116,28 @@ void mouse(int button, int state, int x, int y)
             }
         }
     }
-    else
+    // Middle button rotates camera
+    else if (button == GLUT_MIDDLE_BUTTON)
     {
         // Just pass it on to the ui controller.
-        ui->MouseFunction(button, state, x, y);
+        ui->MouseFunction(GLUT_LEFT_BUTTON, state, x, y);
+    }
+    // Mouse wheel (buttons 3 and 4) zooms in an out (translates camera)
+    else if (button == 3 || button == 4)
+    {
+        std::cout << "Mouse wheel...\n";
+        // TODO zoom
     }
 
     glutPostRedisplay();
 }
 
-void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord)
-{
-    float length = glm::length(joint->pos);
-    glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
-
-    glm::vec4 mouseParentPos(ndcCoord, 1.f);
-    mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
-    mouseParentPos /= mouseParentPos.w;
-
-    glm::vec3 newPos = glm::vec3(mouseParentPos);
-    if (!alterLength && joint->parent != 255)
-        newPos = length * glm::normalize(glm::vec3(mouseParentPos));
-
-    JointPose pose;
-    pose.rot = joint->rot;
-    pose.scale = joint->scale;
-    pose.pos = newPos;
-    skeleton->setPose(selectedJoint, &pose);
-}
-
-void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord)
-{
-    glm::vec4 localCoord = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * joint->worldTransform) * glm::vec4(ndcCoord, 1);
-    localCoord /= localCoord.w;
-
-    glm::vec3 dir = glm::normalize(glm::vec3(localCoord));
-
-    std::cout << "Dir: " << dir.x << ' ' << dir.y << ' ' << dir.z << '\n';
-}
-
 void motion(int x, int y)
 {
-    if (!selectedJoint.empty())
+    if (dragging)
     {
         const Joint* joint = skeleton->getJoint(selectedJoint);
-        glm::vec2 screenpos =
-            (glm::vec2((float)x / windowWidth, (float)(windowHeight - y) / windowHeight)
-            - 0.5f) * 2.f;
+        glm::vec2 screenpos = clickToScreenPos(x, y);
         glm::vec3 ndcCoord(screenpos, jointNDC[selectedJoint].z);
 
         setJointPosition(joint, ndcCoord);
@@ -209,6 +204,46 @@ int main(int argc, char **argv)
 
     glutMainLoop();
     return 0;             /* ANSI C requires main to return int. */
+}
+
+glm::vec2 clickToScreenPos(int x, int y)
+{
+    glm::vec2 screencoord((float)x / windowWidth, (float)y / windowHeight);
+    screencoord -= glm::vec2(0.5f);
+    screencoord *= 2.f;
+    screencoord.y = -screencoord.y;
+
+    return screencoord;
+}
+
+void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord)
+{
+    float length = glm::length(joint->pos);
+    glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+
+    glm::vec4 mouseParentPos(ndcCoord, 1.f);
+    mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
+    mouseParentPos /= mouseParentPos.w;
+
+    glm::vec3 newPos = glm::vec3(mouseParentPos);
+    if (!alterLength && joint->parent != 255)
+        newPos = length * glm::normalize(glm::vec3(mouseParentPos));
+
+    JointPose pose;
+    pose.rot = joint->rot;
+    pose.scale = joint->scale;
+    pose.pos = newPos;
+    skeleton->setPose(selectedJoint, &pose);
+}
+
+void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord)
+{
+    glm::vec4 localCoord = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * joint->worldTransform) * glm::vec4(ndcCoord, 1);
+    localCoord /= localCoord.w;
+
+    glm::vec3 dir = glm::normalize(glm::vec3(localCoord));
+
+    std::cout << "Dir: " << dir.x << ' ' << dir.y << ' ' << dir.z << '\n';
 }
 
 static GLfloat cube_verts[] = {
@@ -308,3 +343,9 @@ void renderAxes(const glm::mat4 &transform)
     glVertex3f(0, 0, 1);
     glEnd();
 }
+
+void renderRotationSphere(const glm::mat4 &transform)
+{
+    // TODO
+}
+
