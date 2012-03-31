@@ -27,21 +27,29 @@ static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
 
 // UI vars
 static std::string selectedJoint;
-static bool alterLength = false;
-static bool renderJointAxis = true;
 static glm::vec2 dragStart;
 static bool dragging = false;
 static int editMode = TRANSLATION_MODE;
 
+static glm::vec3 translationVec(0.f);
+
 // Functions
 glm::vec2 clickToScreenPos(int x, int y);
-void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord);
-void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord);
-void setJointScale(const Joint* joint, const glm::vec3 &ndcCoord);
+void setTranslationVec(const glm::vec2 &clickPos);
+// p1 and p2 determine the line, pt is the point to get distance for
+float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
+
+void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
+void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
+void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
+
 void renderAxes(const glm::mat4 &worldTransform);
+void renderCircle(const glm::mat4 &worldTransform);
+void renderHalfCircle(const glm::mat4 &worldTransform);
 void renderRotationSphere(const glm::mat4 &worldTransform);
 glm::mat4 getModelviewMatrix();
 glm::mat4 getProjectionMatrix();
+std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
 std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
 
 struct EditBoneRenderer : public BoneRenderer
@@ -97,16 +105,8 @@ void mouse(int button, int state, int x, int y)
         // If no joint selected, nothing to do
         if (selectedJoint.empty()) return;
 
-        // Begin a drag
-        dragging = true;
-        dragStart = clickToScreenPos(x, y);
-
-        glm::vec3 clickNDC(dragStart, jointNDC[selectedJoint].z);
-        std::cout << "Click: " << clickNDC << '\n';
-        std::cout << "Joint: " << jointNDC[selectedJoint] << '\n';
-        std::cout << "X axis: " << axisNDC[0] << '\n';
-        std::cout << "Y axis: " << axisNDC[1] << '\n';
-        std::cout << "Z axis: " << axisNDC[2] << '\n';
+        if (editMode == TRANSLATION_MODE)
+            setTranslationVec(clickToScreenPos(x, y));
     }
     // Right mouse selects and deselects bones
     else if (button == GLUT_RIGHT_BUTTON)
@@ -151,14 +151,13 @@ void motion(int x, int y)
     {
         const Joint* joint = skeleton->getJoint(selectedJoint);
         glm::vec2 screenpos = clickToScreenPos(x, y);
-        glm::vec3 ndcCoord(screenpos, jointNDC[selectedJoint].z);
 
         if (editMode == TRANSLATION_MODE)
-            setJointPosition(joint, ndcCoord);
+            setJointPosition(joint, screenpos);
         else if (editMode == ROTATION_MODE)
-            setJointRotation(joint, ndcCoord);
+            setJointRotation(joint, screenpos);
         else if (editMode == SCALE_MODE)
-            setJointScale(joint, ndcCoord);
+            setJointScale(joint, screenpos);
         else
             assert(false && "Unknown edit mode");
     }
@@ -241,8 +240,70 @@ glm::vec2 clickToScreenPos(int x, int y)
     return screencoord;
 }
 
-void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord)
+void setTranslationVec(const glm::vec2 &clickPos)
 {
+    const float margin = 0.01;
+    const float axisDistThresh = 0.01;
+
+    glm::vec3 selJointNDC = jointNDC[selectedJoint];
+
+    glm::vec3 clickNDC(clickPos, selJointNDC.z);
+    std::cout << "Click: " << clickNDC << '\n';
+    std::cout << "Joint: " << selJointNDC << '\n';
+    std::cout << "X axis: " << axisNDC[0] << '\n';
+    std::cout << "Y axis: " << axisNDC[1] << '\n';
+    std::cout << "Z axis: " << axisNDC[2] << '\n';
+
+    float r = glm::length(axisNDC[0] - selJointNDC);
+
+    // figure out what the vector is (i.e. what they clicked on, if anything)
+    // First see if they clicked too far away
+    float dist = glm::length(clickNDC - selJointNDC);
+    if (dist > r + margin)
+        return;
+
+    translationVec = glm::vec3(0.f);
+    // now see if they clicked on any of the axis lines, within margin
+    if (pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[0]), glm::vec2(clickNDC)) < axisDistThresh)
+        translationVec.x = 1.f;
+    else if (pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC)) < axisDistThresh)
+        translationVec.y = 1.f;
+    else if (pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[2]), glm::vec2(clickNDC)) < axisDistThresh)
+        translationVec.z = 1.f;
+
+    std::cout << "Xdist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[0]), glm::vec2(clickNDC))
+        << "  Ydist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC))
+        << "  Zdist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC))
+        << '\n';
+
+    // Now the vector is either set, or they didn't click on an axis vector
+    // Check for circle click by just seeing if they clicked close to the radius
+    // if it's not circle click, no drag
+    if (translationVec == glm::vec3(0.f) && (dist < r - margin || dist > r + margin))
+        return;
+
+    // If we got here, then it's a valid drag and translationVec is already set
+    std::cout << "Translation drag.  vec: " << translationVec << '\n';
+    dragging = true;
+    dragStart = clickPos;
+}
+
+float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
+{
+    // from http://local.wasp.uwa.edu.au/~pbourke/geometry/pointline/
+    float l = glm::length(p2 - p1);
+    float u = ((pt.x - p1.x) * (p2.x - p1.x) + (pt.y - p1.y) * (p2.y - p1.y)) / (l*l);
+
+    glm::vec2 intersect = p1 + u * (p2 - p1);
+    
+    std::cout << "p1: " << p1 << " p2: " << p2 << " intersect: " << intersect << '\n';
+
+    return glm::length(pt - intersect);
+}
+
+void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
+{
+    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
     float length = glm::length(joint->pos);
     glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
 
@@ -251,8 +312,18 @@ void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord)
     mouseParentPos /= mouseParentPos.w;
 
     glm::vec3 newPos = glm::vec3(mouseParentPos);
-    if (!alterLength && joint->parent != 255)
-        newPos = length * glm::normalize(glm::vec3(mouseParentPos));
+    // Now constrain to translation direction, if requested
+    if (translationVec != glm::vec3(0.f))
+    {
+        // NOTE: Currently this is in local mode
+        // Get direction in parent space
+        glm::vec4 tmp(translationVec, 1.f);
+        glm::vec3 dir = glm::normalize(glm::vec3(tmp));
+
+        // now project onto that vector
+        newPos = glm::dot(newPos, dir) * dir;
+    }
+
 
     JointPose pose;
     pose.rot = joint->rot;
@@ -261,18 +332,13 @@ void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord)
     skeleton->setPose(selectedJoint, &pose);
 }
 
-void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord)
+void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 {
-    glm::vec4 localCoord = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * joint->worldTransform) * glm::vec4(ndcCoord, 1);
-    localCoord /= localCoord.w;
-
-    glm::vec3 dir = glm::normalize(glm::vec3(localCoord));
-
-    std::cout << "Dir: " << dir.x << ' ' << dir.y << ' ' << dir.z << '\n';
 }
 
-void setJointScale(const Joint* joint, const glm::vec3 &ndcCoord)
+void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 {
+    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
     float length = glm::length(joint->pos);
     glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
 
@@ -322,7 +388,7 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     renderCube();
 
     // Render axis (x,y,z lines) if necessary
-    if (renderJointAxis && joint->name == selectedJoint)
+    if (editMode == TRANSLATION_MODE && joint->name == selectedJoint)
     {
         renderAxes(transform * joint->worldTransform);
         // Also record the NDC coordinates
@@ -417,11 +483,51 @@ void renderAxes(const glm::mat4 &transform)
     glVertex3f(0, 0, 0);
     glVertex3f(0, 0, 1);
     glEnd();
+
+    glm::vec4 tmp(0,0,0,1);
+    tmp = transform * tmp; tmp /= tmp.w;
+    glm::vec3 pos(tmp);
+
+    glm::mat4 circleTransform;
+    glColor3f(1.f, 1.f, 1.f);
+    renderCircle(glm::translate(glm::mat4(1.f), pos));
+}
+
+void renderCircle(const glm::mat4 &transform)
+{
+    const float r = 0.5f;
+    const int nsegments = 25;
+
+    glLoadMatrixf(glm::value_ptr(transform));
+
+    glBegin(GL_LINE_LOOP);
+    for (float theta = 0.f; theta < 2*M_PI; theta += 2*M_PI/nsegments)
+        glVertex3f(r*cosf(theta), r*sinf(theta), 0.f);
+    glEnd();
+}
+
+void renderHalfCircle(const glm::mat4 &transform)
+{
+    const float r = 0.5f;
+    const int nsegments = 25;
+
+    glLoadMatrixf(glm::value_ptr(transform));
+
+    glBegin(GL_LINE_LOOP);
+    for (float theta = 0.f; theta < M_PI; theta += M_PI/nsegments)
+        glVertex3f(r*cosf(theta), r*sinf(theta), 0.f);
+    glEnd();
 }
 
 void renderRotationSphere(const glm::mat4 &transform)
 {
     // TODO
+}
+
+std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
+{
+    os << v.x << ' ' << v.y;
+    return os;
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec3 &v)
