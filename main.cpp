@@ -33,6 +33,7 @@ static bool dragging = false;
 glm::vec2 clickToScreenPos(int x, int y);
 void setJointPosition(const Joint* joint, const glm::vec3 &ndcCoord);
 void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord);
+void setJointScale(const Joint* joint, const glm::vec3 &ndcCoord);
 void renderAxes(const glm::mat4 &worldTransform);
 void renderRotationSphere(const glm::mat4 &worldTransform);
 glm::mat4 getModelviewMatrix();
@@ -140,8 +141,9 @@ void motion(int x, int y)
         glm::vec2 screenpos = clickToScreenPos(x, y);
         glm::vec3 ndcCoord(screenpos, jointNDC[selectedJoint].z);
 
-        setJointPosition(joint, ndcCoord);
+        //setJointPosition(joint, ndcCoord);
         //setJointRotation(joint, ndcCoord);
+        setJointScale(joint, ndcCoord);
     }
     else
     {
@@ -244,6 +246,25 @@ void setJointRotation(const Joint* joint, const glm::vec3 &ndcCoord)
     glm::vec3 dir = glm::normalize(glm::vec3(localCoord));
 
     std::cout << "Dir: " << dir.x << ' ' << dir.y << ' ' << dir.z << '\n';
+}
+
+void setJointScale(const Joint* joint, const glm::vec3 &ndcCoord)
+{
+    float length = glm::length(joint->pos);
+    glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+
+    glm::vec4 mouseParentPos(ndcCoord, 1.f);
+    mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
+    mouseParentPos /= mouseParentPos.w;
+
+    float newScale = 1.f;
+    newScale = length - glm::length(mouseParentPos);
+
+    JointPose pose;
+    pose.rot = joint->rot;
+    pose.pos = joint->pos;
+    pose.scale = joint->scale * newScale;
+    skeleton->setPose(selectedJoint, &pose);
 }
 
 static GLfloat cube_verts[] = {
