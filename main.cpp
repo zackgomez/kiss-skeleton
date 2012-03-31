@@ -31,12 +31,14 @@ static glm::vec2 dragStart;
 static bool dragging = false;
 static int editMode = TRANSLATION_MODE;
 
+static glm::vec3 startingPos; // the parent space starting pos of selectedJoint
 static glm::vec3 translationVec(0.f);
 
 // Functions
 glm::vec2 clickToScreenPos(int x, int y);
 void setTranslationVec(const glm::vec2 &clickPos);
 // p1 and p2 determine the line, pt is the point to get distance for
+// if the point is not between the line segment, then HUGE_VAL is returned
 float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
 
 void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
@@ -242,8 +244,9 @@ glm::vec2 clickToScreenPos(int x, int y)
 
 void setTranslationVec(const glm::vec2 &clickPos)
 {
-    const float margin = 0.01;
-    const float axisDistThresh = 0.01;
+    // pixels to NDC
+    const float axisDistThresh = 5.f / std::max(windowWidth, windowHeight);
+    const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
 
     glm::vec3 selJointNDC = jointNDC[selectedJoint];
 
@@ -259,7 +262,7 @@ void setTranslationVec(const glm::vec2 &clickPos)
     // figure out what the vector is (i.e. what they clicked on, if anything)
     // First see if they clicked too far away
     float dist = glm::length(clickNDC - selJointNDC);
-    if (dist > r + margin)
+    if (dist > r + circleDistThresh)
         return;
 
     translationVec = glm::vec3(0.f);
@@ -279,13 +282,14 @@ void setTranslationVec(const glm::vec2 &clickPos)
     // Now the vector is either set, or they didn't click on an axis vector
     // Check for circle click by just seeing if they clicked close to the radius
     // if it's not circle click, no drag
-    if (translationVec == glm::vec3(0.f) && (dist < r - margin || dist > r + margin))
+    if (translationVec == glm::vec3(0.f) && (dist < r - circleDistThresh || dist > r + circleDistThresh))
         return;
 
     // If we got here, then it's a valid drag and translationVec is already set
     std::cout << "Translation drag.  vec: " << translationVec << '\n';
     dragging = true;
     dragStart = clickPos;
+    startingPos = skeleton->getJoint(selectedJoint)->pos;
 }
 
 float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
@@ -293,6 +297,10 @@ float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &p
     // from http://local.wasp.uwa.edu.au/~pbourke/geometry/pointline/
     float l = glm::length(p2 - p1);
     float u = ((pt.x - p1.x) * (p2.x - p1.x) + (pt.y - p1.y) * (p2.y - p1.y)) / (l*l);
+
+    // if not 'on' then line segment, then inf distance
+    if (u < 0.f || u > 1.f)
+        return HUGE_VAL;
 
     glm::vec2 intersect = p1 + u * (p2 - p1);
     
@@ -311,7 +319,7 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
     mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
     mouseParentPos /= mouseParentPos.w;
 
-    glm::vec3 newPos = glm::vec3(mouseParentPos);
+    glm::vec3 posDelta = glm::vec3(mouseParentPos) - startingPos;
     // Now constrain to translation direction, if requested
     if (translationVec != glm::vec3(0.f))
     {
@@ -321,9 +329,10 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
         glm::vec3 dir = glm::normalize(glm::vec3(tmp));
 
         // now project onto that vector
-        newPos = glm::dot(newPos, dir) * dir;
+        posDelta = glm::dot(posDelta, dir) * dir;
     }
 
+    glm::vec3 newPos = startingPos + posDelta;
 
     JointPose pose;
     pose.rot = joint->rot;
