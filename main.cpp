@@ -72,10 +72,12 @@ void reshape(int width, int height)
 
 void mouse(int button, int state, int x, int y)
 {
+    // Right mouse selects and deselects bones
     if (button == GLUT_RIGHT_BUTTON)
     {
         if (state == GLUT_DOWN)
         {
+            selectedJoint = "";
             glm::vec2 screencoord((float)x / windowWidth, (float)y / windowHeight);
             screencoord -= glm::vec2(0.5f);
             screencoord *= 2.f;
@@ -93,8 +95,6 @@ void mouse(int button, int state, int x, int y)
                 }
             }
         }
-        else
-            selectedJoint = "";
     }
     else
     {
@@ -145,8 +145,8 @@ void motion(int x, int y)
             - 0.5f) * 2.f;
         glm::vec3 ndcCoord(screenpos, jointNDC[selectedJoint].z);
 
-        //setJointPosition(joint, ndcCoord);
-        setJointRotation(joint, ndcCoord);
+        setJointPosition(joint, ndcCoord);
+        //setJointRotation(joint, ndcCoord);
     }
     else
     {
