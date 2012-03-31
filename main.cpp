@@ -11,7 +11,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include "uistate.h"
 #include "kiss-skeleton.h"
-
 // constants
 static int windowWidth = 800, windowHeight = 600;
 static const float selectThresh = 0.02f;
@@ -258,12 +257,13 @@ void setJointScale(const Joint* joint, const glm::vec3 &ndcCoord)
     mouseParentPos /= mouseParentPos.w;
 
     float newScale = 1.f;
-    newScale = length - glm::length(mouseParentPos);
+    newScale = glm::length(mouseParentPos) - length;
+    //std::cout << newScale << std::endl;
 
     JointPose pose;
     pose.rot = joint->rot;
     pose.pos = joint->pos;
-    pose.scale = joint->scale * newScale;
+    pose.scale = newScale;
     skeleton->setPose(selectedJoint, &pose);
 }
 
