@@ -3,7 +3,7 @@ LDFLAGS=-lGL -lGLEW -lGLU -lglut
 
 all: kiss-skeleton
 
-kiss-skeleton: kiss-skeleton.o main.o ArcBall.o uistate.o
+kiss-skeleton: kiss-skeleton.o main.o arcball.o
 	g++ $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 run: kiss-skeleton

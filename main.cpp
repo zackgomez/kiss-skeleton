@@ -9,30 +9,37 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "uistate.h"
+#include "arcball.h"
 #include "kiss-skeleton.h"
 
 // constants
 static int windowWidth = 800, windowHeight = 600;
+static const float arcballRadius = 10.f;
 static const float selectThresh = 0.02f;
 static const float axisLength = 0.5f;
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 
 // global vars
+static glm::mat4 projMatrix(1.f);
 static glm::mat4 viewMatrix(1.f);
 static Skeleton *skeleton;
-static UIState *ui; // ui controller
+static Arcball *arcball;
 static std::map<std::string, glm::vec3> jointNDC;
 static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
 
 // UI vars
 static std::string selectedJoint;
 static glm::vec2 dragStart;
+static bool rotating = false;
 static bool dragging = false;
 static int editMode = TRANSLATION_MODE;
 
+// translation mode variables
 static glm::vec3 startingPos; // the parent space starting pos of selectedJoint
 static glm::vec3 translationVec(0.f);
+// rotation mode variables
+static glm::vec3 rotationVec(0.f);
+// scaling mode variables
 
 // Functions
 glm::vec2 clickToScreenPos(int x, int y);
@@ -47,6 +54,7 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
 void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
 
+static void renderCube();
 void renderAxes(const glm::mat4 &worldTransform);
 void renderCircle(const glm::mat4 &worldTransform);
 void renderHalfCircle(const glm::mat4 &worldTransform);
@@ -66,13 +74,15 @@ void redraw(void)
     // Now render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Apply the camera transformation.
-    ui->ApplyViewingTransformation();
-
     viewMatrix = getModelviewMatrix();
 
+    glMatrixMode(GL_PROJECTION);
+    projMatrix = arcball->getProjectionMatrix();
+    glLoadMatrixf(glm::value_ptr(projMatrix));
+
     glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+    viewMatrix = arcball->getViewMatrix();
+    glLoadMatrixf(glm::value_ptr(viewMatrix));
 
     skeleton->render(viewMatrix);
 
@@ -81,18 +91,15 @@ void redraw(void)
 
 void reshape(int width, int height)
 {
-    windowWidth = width;
-    windowHeight = height;
-    
     if (width <= 0 || height <= 0)
         return;
-    
-    ui->WindowX() = width;
-    ui->WindowY() = height;
-    
-    ui->Aspect() = float( width ) / height;
-    ui->SetupViewport();
-    ui->SetupViewingFrustum();
+
+    windowWidth = width;
+    windowHeight = height;
+
+    glViewport(0, 0, width, height);
+
+    arcball->setAspect(float(width) / height);
 }
 
 void mouse(int button, int state, int x, int y)
@@ -143,13 +150,21 @@ void mouse(int button, int state, int x, int y)
     // Middle button rotates camera
     else if (button == GLUT_MIDDLE_BUTTON)
     {
-        // Just pass it on to the ui controller.
-        ui->MouseFunction(GLUT_LEFT_BUTTON, state, x, y);
+        if (state == GLUT_DOWN)
+        {
+            glm::vec3 ndc(clickToScreenPos(x, y), 0.f);
+            arcball->start(ndc);
+            rotating = true;
+        }
+        else
+            rotating = false;
     }
     // Mouse wheel (buttons 3 and 4) zooms in an out (translates camera)
     else if (button == 3 || button == 4)
     {
-        std::cout << "Mouse wheel...\n";
+        const float zoomSpeed = 1.1f;
+        float fact = (button == 4) ? zoomSpeed : 1.f/zoomSpeed;
+        arcball->setZoom(arcball->getZoom() * fact);
     }
 
     glutPostRedisplay();
@@ -171,10 +186,10 @@ void motion(int x, int y)
         else
             assert(false && "Unknown edit mode");
     }
-    else
+    else if (rotating)
     {
-        // Just pass it on to the ui controller.
-        ui->MotionFunction(x, y);
+        glm::vec3 ndc(clickToScreenPos(x, y), 0.f);
+        arcball->move(ndc);
     }
 
     glutPostRedisplay();
@@ -216,12 +231,7 @@ int main(int argc, char **argv)
 
     glEnable(GL_DEPTH_TEST);
 
-    ui = new UIState;
-    ui->Trans() = glm::vec3(0, 0, 0);
-    ui->Radius() = 80;
-    ui->Near() = .1;
-    ui->Far() = 1000;
-    ui->CTrans() = glm::vec3(0, 0, -40);
+    arcball = new Arcball(glm::vec3(0, 0, -40), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 
     // --------------------
     // START MY SETUP
@@ -297,10 +307,6 @@ void setTranslationVec(const glm::vec2 &clickPos)
 
 void setRotationVec(const glm::vec2 &clickPos)
 {
-    const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
-
-    float dist = glm::length(glm::vec2(jointNDC[selectedJoint]) - clickPos);
-    std::cout << "Dist: " << dist << '\n';
 }
 
 void setScaleVec(const glm::vec2 &clickPos)
@@ -327,7 +333,6 @@ float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &p
 void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 {
     glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
-    float length = glm::length(joint->pos);
     glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
 
     glm::vec4 mouseParentPos(ndcCoord, 1.f);
@@ -475,23 +480,12 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
 
 glm::mat4 getProjectionMatrix()
 {
-    glm::mat4 pmat;
-    glGetFloatv(GL_PROJECTION_MATRIX, glm::value_ptr(pmat));
-    return pmat;
+    return arcball->getProjectionMatrix();
 }
+
 glm::mat4 getModelviewMatrix()
 {
-    glm::mat4 mat;
-    glGetFloatv(GL_MODELVIEW_MATRIX, glm::value_ptr(mat));
-
-    /*
-    std::cout << "Modelview matrix:\n"
-        << mat[0][0] << ' ' << mat[0][1] << ' ' << mat[0][2] << ' ' << mat[0][3] << '\n'
-        << mat[1][0] << ' ' << mat[1][1] << ' ' << mat[1][2] << ' ' << mat[1][3] << '\n'
-        << mat[2][0] << ' ' << mat[2][1] << ' ' << mat[2][2] << ' ' << mat[2][3] << '\n'
-        << mat[3][0] << ' ' << mat[3][1] << ' ' << mat[3][2] << ' ' << mat[3][3] << '\n';
-        */
-    return mat;
+    return arcball->getViewMatrix();
 }
 
 void renderAxes(const glm::mat4 &transform)
