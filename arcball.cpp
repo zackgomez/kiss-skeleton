@@ -1,7 +1,6 @@
 #include "arcball.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <iostream>
 
 Arcball::Arcball(const glm::vec3 &eye, float radius, float aspect, float near,
         float far, float fov) :
@@ -35,9 +34,6 @@ void Arcball::start(const glm::vec3 &ndc)
 {
     lastRot_ = curRot_;
     start_ = ndcToSphere(ndc);
-
-    std::cout << "Start ndc coord:    " << ndc.x << ' ' << ndc.y << ' ' << ndc.z << '\n';
-    std::cout << "Start sphere coord: " << start_.x << ' ' << start_.y << ' ' << start_.z << '\n';
 }
 
 void Arcball::move(const glm::vec3 &ndc)
@@ -49,15 +45,10 @@ void Arcball::move(const glm::vec3 &ndc)
     if (cur == start_)
         return;
 
-    std::cout << "start: " << start_.x << ' ' << start_.y << ' ' << start_.z << '\n';
-    std::cout << "cur: " << cur.x << ' ' << cur.y << ' ' << cur.z << '\n';
-
     float cos2a = glm::dot(start_, cur);
     float sina = sqrtf((1.f - cos2a) / 2.f);
     float cosa = sqrtf((1.f + cos2a) / 2.f);
     glm::vec3 cross = glm::normalize(glm::cross(start_, cur)) * sina;
-
-    std::cout << "rotating " << cosa << " around " << cross.x << ' ' << cross.y << ' ' << cross.z << '\n';
 
     glm::mat4 nextRot = quatrot(cross.x, cross.y, cross.z, cosa);
 
@@ -80,14 +71,7 @@ const glm::mat4 &Arcball::getViewMatrix() const
 
 void Arcball::setProjectionMatrix()
 {
-    std::cout << "fov: " << fov_ << " aspect: " << aspect_ << '\n';
-    projMat_ = glm::perspective(fov_ / std::min(1.f, aspect_), aspect_, znear_, zfar_);
-
-    std::cout << "Projection Matrix:\n";
-    std::cout << projMat_[0][0] << ' ' << projMat_[0][1] << ' ' << projMat_[0][2] << ' ' << projMat_[0][3] << '\n';
-    std::cout << projMat_[1][0] << ' ' << projMat_[1][1] << ' ' << projMat_[1][2] << ' ' << projMat_[1][3] << '\n';
-    std::cout << projMat_[2][0] << ' ' << projMat_[2][1] << ' ' << projMat_[2][2] << ' ' << projMat_[2][3] << '\n';
-    std::cout << projMat_[3][0] << ' ' << projMat_[3][1] << ' ' << projMat_[3][2] << ' ' << projMat_[3][3] << '\n';
+    projMat_ = glm::perspective(fov_ / glm::min(1.f, aspect_), aspect_, znear_, zfar_);
 }
 
 glm::vec3 Arcball::ndcToSphere(const glm::vec3 &ndc) const
@@ -101,7 +85,7 @@ glm::vec3 Arcball::ndcToSphere(const glm::vec3 &ndc) const
     // inside sphere, need to compute z coordinate
     else
     {
-        mag = std::min(1.f, mag);
+        mag = glm::min(1.f, mag);
         ball.z = sqrtf(1.f - mag*mag);
     }
 

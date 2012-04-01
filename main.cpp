@@ -17,6 +17,7 @@ static int windowWidth = 800, windowHeight = 600;
 static const float arcballRadius = 10.f;
 static const float selectThresh = 0.02f;
 static const float axisLength = 0.5f;
+static const float circleRadius = 0.3f;
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 
 // global vars
@@ -43,6 +44,7 @@ static glm::vec3 rotationVec(0.f);
 
 // Functions
 glm::vec2 clickToScreenPos(int x, int y);
+glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec);
 void setTranslationVec(const glm::vec2 &clickPos);
 void setRotationVec(const glm::vec2 &clickPos);
 void setScaleVec(const glm::vec2 &clickPos);
@@ -55,7 +57,7 @@ void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
 
 static void renderCube();
-void renderAxes(const glm::mat4 &worldTransform);
+void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
 void renderCircle(const glm::mat4 &worldTransform);
 void renderHalfCircle(const glm::mat4 &worldTransform);
 void renderRotationSphere(const glm::mat4 &worldTransform);
@@ -260,6 +262,14 @@ glm::vec2 clickToScreenPos(int x, int y)
     return screencoord;
 }
 
+glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec)
+{
+    glm::vec4 pt(vec, 1);
+    pt = mat * pt;
+    pt /= pt.w;
+    return glm::vec3(pt);
+}
+
 void setTranslationVec(const glm::vec2 &clickPos)
 {
     // pixels to NDC
@@ -270,12 +280,10 @@ void setTranslationVec(const glm::vec2 &clickPos)
 
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
 
-    float r = glm::length(axisNDC[0] - selJointNDC);
-
     // figure out what the vector is (i.e. what they clicked on, if anything)
     // First see if they clicked too far away
     float dist = glm::length(clickNDC - selJointNDC);
-    if (dist > r + circleDistThresh)
+    if (dist > circleRadius + circleDistThresh)
         return;
 
     translationVec = glm::vec3(0.f);
@@ -290,12 +298,13 @@ void setTranslationVec(const glm::vec2 &clickPos)
     std::cout << "Xdist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[0]), glm::vec2(clickNDC))
         << "  Ydist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC))
         << "  Zdist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC))
-        << '\n';
+        << "  dist:  " << dist << '\n';
 
     // Now the vector is either set, or they didn't click on an axis vector
     // Check for circle click by just seeing if they clicked close to the radius
     // if it's not circle click, no drag
-    if (translationVec == glm::vec3(0.f) && (dist < r - circleDistThresh || dist > r + circleDistThresh))
+    if (translationVec == glm::vec3(0.f) &&
+            (dist < circleRadius - circleDistThresh || dist > circleRadius + circleDistThresh))
         return;
 
     // If we got here, then it's a valid drag and translationVec is already set
@@ -420,26 +429,8 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     // Render axis (x,y,z lines) if necessary
     if (editMode == TRANSLATION_MODE && joint->name == selectedJoint)
     {
-        renderAxes(transform * joint->worldTransform);
-        // Also record the NDC coordinates
-        glm::mat4 fullTrans = glm::scale(getProjectionMatrix() * transform * joint->worldTransform,
-                glm::vec3(axisLength));
-        glm::vec4 p;
-        // x
-        p = glm::vec4(1, 0, 0, 1);
-        p = fullTrans * p;
-        p /= p.w;
-        axisNDC[0] = glm::vec3(p);
-        // y
-        p = glm::vec4(0, 1, 0, 1);
-        p = fullTrans * p;
-        p /= p.w;
-        axisNDC[1] = glm::vec3(p);
-        // z
-        p = glm::vec4(0, 0, 1, 1);
-        p = fullTrans * p;
-        p /= p.w;
-        axisNDC[2] = glm::vec3(p);
+        glm::vec3 axisCenter = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
+        renderAxes(transform, axisCenter);
     }
     else if (editMode == ROTATION_MODE && joint->name == selectedJoint)
     {
@@ -488,7 +479,7 @@ glm::mat4 getModelviewMatrix()
     return arcball->getViewMatrix();
 }
 
-void renderAxes(const glm::mat4 &transform)
+void renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
 {
     glm::mat4 finalTransform = glm::scale(transform, glm::vec3(axisLength));
     glLoadMatrixf(glm::value_ptr(finalTransform));
@@ -512,7 +503,20 @@ void renderAxes(const glm::mat4 &transform)
     glm::vec3 pos(tmp);
 
     glColor3f(1.f, 1.f, 1.f);
-    renderCircle(glm::translate(glm::mat4(1.f), pos));
+    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
+
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
+
+    renderCircle(glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), glm::vec3(circleRadius)));
+
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+
+    // TODO record NDC coordinates...
 }
 
 void renderCircle(const glm::mat4 &transform)
