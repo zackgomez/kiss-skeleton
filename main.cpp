@@ -37,6 +37,8 @@ static glm::vec3 translationVec(0.f);
 // Functions
 glm::vec2 clickToScreenPos(int x, int y);
 void setTranslationVec(const glm::vec2 &clickPos);
+void setRotationVec(const glm::vec2 &clickPos);
+void setScaleVec(const glm::vec2 &clickPos);
 // p1 and p2 determine the line, pt is the point to get distance for
 // if the point is not between the line segment, then HUGE_VAL is returned
 float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
@@ -107,8 +109,15 @@ void mouse(int button, int state, int x, int y)
         // If no joint selected, nothing to do
         if (selectedJoint.empty()) return;
 
+        glm::vec2 clickPos = clickToScreenPos(x, y);
         if (editMode == TRANSLATION_MODE)
-            setTranslationVec(clickToScreenPos(x, y));
+            setTranslationVec(clickPos);
+        else if (editMode == ROTATION_MODE)
+            setRotationVec(clickPos);
+        else if (editMode == SCALE_MODE)
+            setScaleVec(clickPos);
+        else
+            assert(false && "unknown mode");
     }
     // Right mouse selects and deselects bones
     else if (button == GLUT_RIGHT_BUTTON)
@@ -141,7 +150,6 @@ void mouse(int button, int state, int x, int y)
     else if (button == 3 || button == 4)
     {
         std::cout << "Mouse wheel...\n";
-        // TODO zoom
     }
 
     glutPostRedisplay();
@@ -251,11 +259,6 @@ void setTranslationVec(const glm::vec2 &clickPos)
     glm::vec3 selJointNDC = jointNDC[selectedJoint];
 
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
-    std::cout << "Click: " << clickNDC << '\n';
-    std::cout << "Joint: " << selJointNDC << '\n';
-    std::cout << "X axis: " << axisNDC[0] << '\n';
-    std::cout << "Y axis: " << axisNDC[1] << '\n';
-    std::cout << "Z axis: " << axisNDC[2] << '\n';
 
     float r = glm::length(axisNDC[0] - selJointNDC);
 
@@ -290,6 +293,18 @@ void setTranslationVec(const glm::vec2 &clickPos)
     dragging = true;
     dragStart = clickPos;
     startingPos = skeleton->getJoint(selectedJoint)->pos;
+}
+
+void setRotationVec(const glm::vec2 &clickPos)
+{
+    const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
+
+    float dist = glm::length(glm::vec2(jointNDC[selectedJoint]) - clickPos);
+    std::cout << "Dist: " << dist << '\n';
+}
+
+void setScaleVec(const glm::vec2 &clickPos)
+{
 }
 
 float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
@@ -343,6 +358,7 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 
 void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 {
+    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
 }
 
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
@@ -526,8 +542,11 @@ void renderHalfCircle(const glm::mat4 &transform)
     glLoadMatrixf(glm::value_ptr(transform));
 
     glBegin(GL_LINE_STRIP);
-    for (float theta = 0.f; theta <= M_PI; theta += M_PI/nsegments)
+    for (int i = 0; i < nsegments+1; i++)
+    {
+        float theta = i * M_PI/nsegments;
         glVertex3f(r*cosf(theta), r*sinf(theta), 0.f);
+    }
     glEnd();
 }
 
@@ -552,24 +571,37 @@ void renderRotationSphere(const glm::mat4 &transform)
         glm::scale(glm::translate(glm::mat4(1.f), worldPos), glm::vec3(2.f));
 
 
+    glLineWidth(2);
     // Render a white enclosing circle
     glColor3f(1.f, 1.f, 1.f);
     renderCircle(sphereTransform);
 
-    // a vector point towards camera in NDC
-    tmp = glm::vec4(0,0,-1,0);
-    tmp = glm::inverse(getProjectionMatrix() * arcTransform) * tmp;
-
+    // TODO rotate arcs to always face the camera as much as possible
+    // vector pointing at camera in NDC
+    //tmp = glm::vec4(0,0,-1,0);
+    //tmp = glm::inverse(getProjectionMatrix() * arcTransform) * tmp;
+    //glm::vec3 cameraDir = glm::normalize(glm::vec3(tmp));
+    //float angle = 180.f / M_PI * acosf(glm::dot(cameraDir, glm::vec3(0,1,0)));
+    //if (cameraDir.z < 0) angle = -angle;
+    //std::cout << "camera dir: " << cameraDir << '\n';
+    //std::cout << "angle: " << angle << '\n';
 
     // X handle
     glColor3f(1.0f, 0.5f, 0.5f);
-    renderHalfCircle(glm::rotate(arcTransform, 90.f, glm::vec3(0,1,0)));
+    renderHalfCircle(glm::rotate(
+                glm::rotate(arcTransform, 0.f, glm::vec3(1,0,0)),
+                90.f, glm::vec3(0,1,0)));
     // Y handle
     glColor3f(0.5f, 1.0f, 0.5f);
-    renderHalfCircle(glm::rotate(arcTransform, 90.f, glm::vec3(1,0,0)));
+    renderHalfCircle(glm::rotate(
+                glm::rotate(arcTransform, 0.f, glm::vec3(0,1,0)),
+                90.f, glm::vec3(1,0,0)));
     // Z handle
     glColor3f(0.5f, 0.5f, 1.0f);
-    renderHalfCircle(glm::rotate(arcTransform, 90.f, glm::vec3(0,0,1)));
+    renderHalfCircle(glm::rotate(
+                glm::rotate(arcTransform, 0.f, glm::vec3(0,1,0)),
+                90.f, glm::vec3(0,0,1)));
+    glLineWidth(1);
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
