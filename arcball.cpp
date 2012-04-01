@@ -46,7 +46,11 @@ void Arcball::move(const glm::vec3 &ndc)
     if (start_ == glm::vec3() || cur == glm::vec3())
         return;
 
-    // if (cur == start) ...
+    if (cur == start_)
+        return;
+
+    std::cout << "start: " << start_.x << ' ' << start_.y << ' ' << start_.z << '\n';
+    std::cout << "cur: " << cur.x << ' ' << cur.y << ' ' << cur.z << '\n';
 
     float cos2a = glm::dot(start_, cur);
     float sina = sqrtf((1.f - cos2a) / 2.f);
@@ -88,28 +92,20 @@ void Arcball::setProjectionMatrix()
 
 glm::vec3 Arcball::ndcToSphere(const glm::vec3 &ndc) const
 {
-    glm::vec3 viewCoord = applyMatrix(glm::inverse(projMat_), ndc);
+    glm::vec3 ball = ndc;
+    float mag = glm::length(ball);
+    
+    // outside of sphere, just points right at point
+    if (mag > radius_)
+        ball = glm::normalize(ball);
+    // inside sphere, need to compute z coordinate
+    else
+    {
+        mag = std::min(1.f, mag);
+        ball.z = sqrtf(1.f - mag*mag);
+    }
 
-    // a ray going from 0,0,0 in raydir goes from camera to click position
-    glm::vec3 raydir = glm::normalize(viewCoord);
-    // Origin in view space...
-    glm::vec3 origin = applyMatrix(getViewMatrix(), glm::vec3(0,0,0));
-
-    float a = glm::dot(raydir, raydir);
-    float b = 2 * glm::dot(-raydir, origin);
-    float c = glm::dot(origin, origin) - radius_ * radius_;
-
-    float disc = b*b - 4 * a * c;
-    if (disc < 0)
-        return glm::vec3(0,0,0);
-
-    // 'time' of intersect, i.e. distance along ray
-    float t = (-b - sqrtf(disc)) / (2*a);
-    // viewspace coordinate of intersection
-    glm::vec3 intersectPoint = t * raydir;
-
-    // and calculate sphere coordinate, normalized
-    return glm::normalize(intersectPoint - origin);
+    return ball;
 }
 
 glm::vec3 Arcball::applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec)
