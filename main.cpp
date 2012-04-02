@@ -63,7 +63,7 @@ void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
 void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const glm::vec3 &p1);
 void renderCircle(const glm::mat4 &worldTransform);
 void renderHalfCircle(const glm::mat4 &worldTransform);
-void renderRotationSphere(const glm::mat4 &worldTransform);
+void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
 glm::mat4 getModelviewMatrix();
 glm::mat4 getProjectionMatrix();
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
@@ -431,7 +431,7 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     glLoadMatrixf(glm::value_ptr(glm::scale(transform * joint->worldTransform,
                     glm::vec3(0.08f))));
     if (joint->name == selectedJoint)
-        glColor3f(0.2f, 0.2f, 0.8f);
+        glColor3f(0.9f, 0.5f, 0.5f);
     else
         glColor3f(1, 1, 1);
     renderCube();
@@ -444,7 +444,8 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     }
     else if (editMode == ROTATION_MODE && joint->name == selectedJoint)
     {
-        renderRotationSphere(transform * joint->worldTransform);
+        glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
+        renderRotationSphere(transform, pos);
     }
 
     // Record joint NDC coordinates
@@ -587,12 +588,24 @@ void renderHalfCircle(const glm::mat4 &transform)
     glEnd();
 }
 
-void renderRotationSphere(const glm::mat4 &transform)
+void renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoord)
 {
+    // Render in NDC coordinates, no projection matrix needed
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
+
+    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
+    glm::vec3 screenCoord = glm::vec3(ndcCoord.x, ndcCoord.y, 0.f);
+
+    // Render a white enclosing circle
+    glm::mat4 sphereTransform = glm::scale(glm::translate(glm::mat4(1.f), screenCoord),
+                    glm::vec3(circleRadius));
+    glColor3f(1.f, 1.f, 1.f);
+    renderCircle(sphereTransform);
+
     glm::vec3 viewPos = applyMatrix(transform, glm::vec3(0.f));
-    glm::mat4 sphereTransform = glm::scale(
-            glm::translate(glm::mat4(1.f), viewPos),
-            glm::vec3(3.f));
 
     glm::mat4 worldTransform = skeleton->getJoint(selectedJoint)->worldTransform;
     glm::mat4 viewTransform = transform * glm::inverse(worldTransform);
@@ -605,19 +618,6 @@ void renderRotationSphere(const glm::mat4 &transform)
 
 
     glLineWidth(2);
-    // Render a white enclosing circle
-    glColor3f(1.f, 1.f, 1.f);
-    renderCircle(sphereTransform);
-
-    // TODO rotate arcs to always face the camera as much as possible
-    // vector pointing at camera in NDC
-    //tmp = glm::vec4(0,0,-1,0);
-    //tmp = glm::inverse(getProjectionMatrix() * arcTransform) * tmp;
-    //glm::vec3 cameraDir = glm::normalize(glm::vec3(tmp));
-    //float angle = 180.f / M_PI * acosf(glm::dot(cameraDir, glm::vec3(0,1,0)));
-    //if (cameraDir.z < 0) angle = -angle;
-    //std::cout << "camera dir: " << cameraDir << '\n';
-    //std::cout << "angle: " << angle << '\n';
 
     // X handle
     glColor3f(1.0f, 0.5f, 0.5f);
@@ -635,6 +635,11 @@ void renderRotationSphere(const glm::mat4 &transform)
                 glm::rotate(arcTransform, 0.f, glm::vec3(0,1,0)),
                 90.f, glm::vec3(0,0,1)));
     glLineWidth(1);
+
+    // Fix matrices
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
