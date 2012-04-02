@@ -259,7 +259,7 @@ glm::vec2 clickToScreenPos(int x, int y)
     if (x > windowCoord || y > windowCoord)
         return glm::vec2(HUGE_VAL);
 
-    glm::vec2 screencoord((float)(x - (windowWidth - windowCoord)) / windowCoord, (float)(y - (windowHeight - windowCoord)) / windowCoord);
+    glm::vec2 screencoord((float)(x) / windowCoord, (float)(y - (windowHeight - windowCoord)) / windowCoord);
     screencoord -= glm::vec2(0.5f);
     screencoord *= 2.f;
     screencoord.y = -screencoord.y;
