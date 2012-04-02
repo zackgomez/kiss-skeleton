@@ -22,8 +22,6 @@ static const float circleRadius = 0.15f; //ndc
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 
 // global vars
-static glm::mat4 projMatrix(1.f);
-static glm::mat4 viewMatrix(1.f);
 static Skeleton *skeleton;
 static Arcball *arcball;
 static std::map<std::string, glm::vec3> jointNDC;
@@ -79,14 +77,12 @@ void redraw(void)
     // Now render
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    viewMatrix = getModelviewMatrix();
-
     glMatrixMode(GL_PROJECTION);
-    projMatrix = arcball->getProjectionMatrix();
+    glm::mat4 projMatrix = arcball->getProjectionMatrix();
     glLoadMatrixf(glm::value_ptr(projMatrix));
 
     glMatrixMode(GL_MODELVIEW);
-    viewMatrix = arcball->getViewMatrix();
+    glm::mat4 viewMatrix = arcball->getViewMatrix();
     glLoadMatrixf(glm::value_ptr(viewMatrix));
 
     skeleton->render(viewMatrix);
@@ -515,13 +511,13 @@ void renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
             glm::rotate(glm::translate(glm::mat4(1.f), ndcCoord), 0.f, glm::vec3(0,0,1)),
             glm::vec3(1.f));
 
+    glm::vec3 xdir = applyMatrix(getProjectionMatrix() * transform, glm::vec3(1,0,0), false);
+    glm::vec3 ydir = applyMatrix(getProjectionMatrix() * transform, glm::vec3(0,1,0), false);
+    glm::vec3 zdir = applyMatrix(getProjectionMatrix() * transform, glm::vec3(0,0,1), false);
     glm::vec3 p0   = glm::vec3(ndcCoord.x, ndcCoord.y, 0.f);
-    glm::vec3 xdir = applyMatrix(getProjectionMatrix() * viewMatrix, glm::vec3(1,0,0), false);
-    glm::vec3 xp1  = ndcCoord + 0.5f * axisLength * xdir; xp1.z = 0.f;
-    glm::vec3 ydir = applyMatrix(getProjectionMatrix() * viewMatrix, glm::vec3(0,1,0), false);
-    glm::vec3 yp1  = ndcCoord + 0.5f * axisLength * ydir; yp1.z = 0.f;
-    glm::vec3 zdir = applyMatrix(getProjectionMatrix() * viewMatrix, glm::vec3(0,0,1), false);
     glm::vec3 zp1  = ndcCoord + 0.5f * axisLength * zdir; zp1.z = 0.f;
+    glm::vec3 xp1  = ndcCoord + 0.5f * axisLength * xdir; xp1.z = 0.f;
+    glm::vec3 yp1  = ndcCoord + 0.5f * axisLength * ydir; yp1.z = 0.f;
 
     // render x axis
     glColor3f(1.0f, 0.5f, 0.5f);
@@ -550,9 +546,6 @@ void renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
     // record center ndc coord
     circleNDC = ndcCoord;
 
-    std::cout << "Circle: " << circleNDC << " ndc: " << ndcCoord << '\n';
-
-
     // Fix matrices
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
@@ -572,18 +565,20 @@ void renderCircle(const glm::mat4 &transform)
     glEnd();
 }
 
-void renderHalfCircle(const glm::mat4 &transform)
+void renderArc(const glm::vec3 &start, const glm::vec3 &center,
+        const glm::vec3 &normal, float deg)
 {
-    const float r = 1.f;
+    glLoadIdentity();
     const int nsegments = 50;
-
-    glLoadMatrixf(glm::value_ptr(transform));
+    const glm::vec3 arm = start - center;
 
     glBegin(GL_LINE_STRIP);
     for (int i = 0; i < nsegments+1; i++)
     {
-        float theta = i * M_PI/nsegments;
-        glVertex3f(r*cosf(theta), r*sinf(theta), 0.f);
+        float theta = i * deg/nsegments - deg/2.f;
+        glm::mat4 rot = glm::rotate(glm::mat4(1.f), theta, normal);
+        glm::vec3 pt = applyMatrix(rot, arm) + center;
+        glVertex3fv(glm::value_ptr(pt));
     }
     glEnd();
 }
@@ -596,45 +591,33 @@ void renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoor
     glLoadIdentity();
     glMatrixMode(GL_MODELVIEW);
 
-    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
+    glm::mat4 fullMat = getProjectionMatrix() * transform;
+
+    glm::vec3 ndcCoord = applyMatrix(fullMat, worldCoord);
     glm::vec3 screenCoord = glm::vec3(ndcCoord.x, ndcCoord.y, 0.f);
 
     // Render a white enclosing circle
-    glm::mat4 sphereTransform = glm::scale(glm::translate(glm::mat4(1.f), screenCoord),
-                    glm::vec3(circleRadius));
-    glColor3f(1.f, 1.f, 1.f);
-    renderCircle(sphereTransform);
+    glColor3f(1,1,1);
+    renderArc(glm::vec3(circleRadius,0,0)+screenCoord, screenCoord, glm::vec3(0,0,-1), 360.f);
 
-    glm::vec3 viewPos = applyMatrix(transform, glm::vec3(0.f));
+    glm::vec3 xdir = glm::normalize(applyMatrix(transform, glm::vec3(1,0,0), false));
+    glm::vec3 ydir = glm::normalize(applyMatrix(transform, glm::vec3(0,1,0), false));
+    glm::vec3 zdir = glm::normalize(applyMatrix(transform, glm::vec3(0,0,1), false));
 
-    glm::mat4 worldTransform = skeleton->getJoint(selectedJoint)->worldTransform;
-    glm::mat4 viewTransform = transform * glm::inverse(worldTransform);
-    glm::vec3 worldPos = applyMatrix(worldTransform, glm::vec3(0.f));
+    glm::vec3 camdir(0,0,1);
+    glm::vec3 dir; 
+    
+    glColor3f(1,0.5f,0.5f);
+    dir = glm::normalize(camdir - glm::dot(camdir, xdir) * xdir);
+    renderArc(screenCoord + axisLength*dir, screenCoord, xdir, 180.f);
 
-    glm::mat4 arcTransform;
-    // global arc transform
-    arcTransform = viewTransform *
-        glm::scale(glm::translate(glm::mat4(1.f), worldPos), glm::vec3(2.f));
+    glColor3f(0.5f,1,0.5f);
+    dir = glm::normalize(camdir - glm::dot(camdir, ydir) * ydir);
+    renderArc(screenCoord + axisLength*dir, screenCoord, ydir, 180.f);
 
-
-    glLineWidth(2);
-
-    // X handle
-    glColor3f(1.0f, 0.5f, 0.5f);
-    renderHalfCircle(glm::rotate(
-                glm::rotate(arcTransform, 0.f, glm::vec3(1,0,0)),
-                90.f, glm::vec3(0,1,0)));
-    // Y handle
-    glColor3f(0.5f, 1.0f, 0.5f);
-    renderHalfCircle(glm::rotate(
-                glm::rotate(arcTransform, 0.f, glm::vec3(0,1,0)),
-                90.f, glm::vec3(1,0,0)));
-    // Z handle
-    glColor3f(0.5f, 0.5f, 1.0f);
-    renderHalfCircle(glm::rotate(
-                glm::rotate(arcTransform, 0.f, glm::vec3(0,1,0)),
-                90.f, glm::vec3(0,0,1)));
-    glLineWidth(1);
+    glColor3f(0.5f,0.5f,1);
+    dir = glm::normalize(camdir - glm::dot(camdir, zdir) * zdir);
+    renderArc(screenCoord + axisLength*dir, screenCoord, zdir, 180.f);
 
     // Fix matrices
     glMatrixMode(GL_PROJECTION);
