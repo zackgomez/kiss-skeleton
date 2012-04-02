@@ -14,10 +14,11 @@
 
 // constants
 static int windowWidth = 800, windowHeight = 600;
+static int windowCoord = 600;
 static const float arcballRadius = 10.f;
 static const float selectThresh = 0.02f;
 static const float axisLength = 0.5f;
-static const float circleRadius = 0.3f;
+static const float circleRadius = 0.15f;
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 
 // global vars
@@ -27,6 +28,7 @@ static Skeleton *skeleton;
 static Arcball *arcball;
 static std::map<std::string, glm::vec3> jointNDC;
 static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
+static glm::vec3 circleNDC;  // circle ndc coordinate
 
 // UI vars
 static std::string selectedJoint;
@@ -96,12 +98,14 @@ void reshape(int width, int height)
     if (width <= 0 || height <= 0)
         return;
 
+    windowCoord = std::min(width, height);
+
     windowWidth = width;
     windowHeight = height;
 
-    glViewport(0, 0, width, height);
+    glViewport(0, 0, windowCoord, windowCoord);
 
-    arcball->setAspect(float(width) / height);
+    arcball->setAspect(1.f);
 }
 
 void mouse(int button, int state, int x, int y)
@@ -191,7 +195,8 @@ void motion(int x, int y)
     else if (rotating)
     {
         glm::vec3 ndc(clickToScreenPos(x, y), 0.f);
-        arcball->move(ndc);
+        if (ndc != glm::vec3(HUGE_VAL, HUGE_VAL, 0.f))
+            arcball->move(ndc);
     }
 
     glutPostRedisplay();
@@ -233,7 +238,7 @@ int main(int argc, char **argv)
 
     glEnable(GL_DEPTH_TEST);
 
-    arcball = new Arcball(glm::vec3(0, 0, -40), 20.f, 1.f, 0.1f, 1000.f, 50.f);
+    arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 
     // --------------------
     // START MY SETUP
@@ -254,11 +259,15 @@ int main(int argc, char **argv)
 
 glm::vec2 clickToScreenPos(int x, int y)
 {
-    glm::vec2 screencoord((float)x / windowWidth, (float)y / windowHeight);
+    if (x > windowCoord || y > windowCoord)
+        return glm::vec2(HUGE_VAL);
+
+    glm::vec2 screencoord((float)(x - (windowWidth - windowCoord)) / windowCoord, (float)(y - (windowHeight - windowCoord)) / windowCoord);
     screencoord -= glm::vec2(0.5f);
     screencoord *= 2.f;
     screencoord.y = -screencoord.y;
 
+    //std::cout << "in: " << x << ' ' << y << "  coord: " << screencoord << '\n';
     return screencoord;
 }
 
@@ -334,7 +343,7 @@ float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &p
 
     glm::vec2 intersect = p1 + u * (p2 - p1);
     
-    std::cout << "p1: " << p1 << " p2: " << p2 << " intersect: " << intersect << '\n';
+    //std::cout << "p1: " << p1 << " p2: " << p2 << " intersect: " << intersect << '\n';
 
     return glm::length(pt - intersect);
 }
@@ -444,6 +453,7 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     jointndc = fullTransform * jointndc;
     jointndc /= jointndc.w;
     jointNDC[joint->name] = glm::vec3(jointndc);
+    //std::cout << "joint: " << joint->name << " ndc: " << glm::vec3(jointndc) << '\n';
 
     // No "bone" to draw for root
     if (joint->parent == 255)
@@ -510,13 +520,16 @@ void renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
     glLoadIdentity();
     glMatrixMode(GL_MODELVIEW);
 
-    renderCircle(glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), glm::vec3(circleRadius)));
+    glm::mat4 circleTransform = glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), glm::vec3(circleRadius * 2.f));
+    renderCircle(circleTransform);
+    // record center ndc coord
+    circleNDC = applyMatrix(circleTransform, glm::vec3(0.f));
 
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
 
-    // TODO record NDC coordinates...
+    // TODO axis record NDC coordinates...
 }
 
 void renderCircle(const glm::mat4 &transform)
