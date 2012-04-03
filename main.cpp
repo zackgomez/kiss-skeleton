@@ -372,13 +372,15 @@ void setRotationVec(const glm::vec2 &clickPos)
     if (globalVec == glm::vec3(0.f))
         return;
 
+    // Transform the rotation vector into parent space so that the transformation
+    // is around the global axes
     glm::mat4 parentTransform = skeleton->getJoint(joint->parent)->worldTransform;
     rotationVec = applyMatrix(glm::inverse(parentTransform), globalVec, false);
+    // Save startign rotation as quat
+    startingRot = axisAngleToQuat(joint->rot);
 
     dragging = true;
     dragStart = clickPos;
-
-    startingRot = axisAngleToQuat(joint->rot);
 
     std::cout << "Rotation drag.  axis: " << globalVec << "  vec: " << rotationVec << '\n';
 }
@@ -401,6 +403,8 @@ void setScaleVec(const glm::vec2 &clickPos)
     dragging = true;
     dragStart = clickPos;
     startingPos = skeleton->getJoint(selectedJoint)->pos;
+
+    std::cout << "Scale drag.\n";
 }
 
 float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
@@ -422,27 +426,16 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 {
     if (dragPos == glm::vec2(HUGE_VAL))
         return;
-    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
-    glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+    glm::mat4 parentWorld = joint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
 
-    glm::vec4 mouseParentPos(ndcCoord, 1.f);
-    mouseParentPos = glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld) * mouseParentPos;
-    mouseParentPos /= mouseParentPos.w;
-
-    glm::vec3 posDelta = glm::vec3(mouseParentPos) - startingPos;
-    // Now constrain to translation direction, if requested
+    glm::vec2 dragDelta = dragPos - dragStart;
+    glm::vec3 worldDelta = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix()),
+            glm::vec3(dragDelta, 0.f), false);
     if (translationVec != glm::vec3(0.f))
-    {
-        // NOTE: Currently this is in local mode
-        // Get direction in parent space
-        glm::vec4 tmp(translationVec, 1.f);
-        glm::vec3 dir = glm::normalize(glm::vec3(tmp));
+        worldDelta = glm::dot(worldDelta, translationVec) * translationVec;
+    glm::vec3 parentDelta = applyMatrix(glm::inverse(parentWorld), worldDelta, false);
 
-        // now project onto that vector
-        posDelta = glm::dot(posDelta, dir) * dir;
-    }
-
-    glm::vec3 newPos = startingPos + posDelta;
+    glm::vec3 newPos = startingPos + parentDelta;
 
     JointPose pose;
     pose.rot = joint->rot;

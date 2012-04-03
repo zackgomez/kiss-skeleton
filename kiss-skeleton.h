@@ -58,6 +58,9 @@ public:
     const Joint* getJoint(unsigned index) const;
     void setPose(const std::string& name, const JointPose *pose);
 
+    // The parent index of the root bone
+    static const unsigned ROOT_PARENT;
+
 private:
     std::vector<Joint*> joints_;
 
@@ -65,7 +68,5 @@ private:
 
     void setWorldTransform(Joint* bone);
     void readJoint(const std::string &jointstr);
-
-    static const unsigned ROOT_PARENT;
 };
 
