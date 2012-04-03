@@ -19,7 +19,7 @@ static int windowCoord = 600;
 static const float arcballRadius = 10.f;
 static const float selectThresh = 0.02f;
 static const float axisLength = 0.10f; // ndc
-static const float circleRadius = 0.15f; //ndc
+static const float circleRadius = 0.12f; //ndc
 static const float scaleCircleRadius = 0.15f; //ndc
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 
@@ -27,6 +27,7 @@ static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 static Skeleton *skeleton;
 static Arcball *arcball;
 static std::map<std::string, glm::vec3> jointNDC;
+static glm::vec3 axisDir[3]; // x,y,z axis directions
 static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
 static glm::vec3 circleNDC;  // circle ndc coordinate
 
@@ -331,23 +332,55 @@ void setTranslationVec(const glm::vec2 &clickPos)
 
 void setRotationVec(const glm::vec2 &clickPos)
 {
-    const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
+    const float axisDistThresh = 5.f / glm::max(windowWidth, windowHeight);
+    const float arcDistThresh = 0.003f;
     glm::vec3 selJointNDC = jointNDC[selectedJoint];
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
     const Joint* joint = skeleton->getJoint(selectedJoint);
+    const float r = axisLength;
 
+    // Check if they're outside of the rendered rotation sphere
     float dist = glm::length(clickNDC - selJointNDC);
-    if (dist > circleRadius + circleDistThresh)
+    if (dist > axisLength + axisDistThresh)
         return;
 
-    rotationVec = applyMatrix(glm::inverse(joint->worldTransform), glm::vec3(1,0,0), false);
+    // Now compute the location of their click on the sphere, radius small
+    // Assume they've clicked on the sphere, so just map to front hemisphere
+    glm::vec3 sphereLoc = glm::vec3((clickPos - glm::vec2(selJointNDC)), 0.f);
+    // Now fill out z coordinate to make length appropriate
+    float mag = glm::min(r, glm::length(sphereLoc));
+    sphereLoc.z = sqrtf(r*r - mag*mag);
+    sphereLoc = glm::normalize(sphereLoc);
+
+    // The global rotation vector
+    glm::vec3 globalVec(0.f);
+
+    // Now figure out if any of those lie along the drawn arcs
+    // Project the sphere location onto each of the axis planes (for x axis, the y,z plane)
+    // Then get the length of that vector, if it's nearly 1, then they are next to the arc
+    float xdist = 1.f - glm::length(sphereLoc - glm::dot(sphereLoc, axisDir[0]) * axisDir[0]);
+    float ydist = 1.f - glm::length(sphereLoc - glm::dot(sphereLoc, axisDir[1]) * axisDir[1]);
+    float zdist = 1.f - glm::length(sphereLoc - glm::dot(sphereLoc, axisDir[2]) * axisDir[2]);
+    if (xdist < arcDistThresh)
+        globalVec = glm::vec3(1, 0, 0);
+    else if (ydist < arcDistThresh)
+        globalVec = glm::vec3(0, 1, 0);
+    else if (zdist < arcDistThresh)
+        globalVec = glm::vec3(0, 0, 1);
+
+    // If no arc selected, no drag initiated
+    if (globalVec == glm::vec3(0.f))
+        return;
+
+    glm::mat4 parentTransform = skeleton->getJoint(joint->parent)->worldTransform;
+    rotationVec = applyMatrix(glm::inverse(parentTransform), globalVec, false);
 
     dragging = true;
     dragStart = clickPos;
 
     startingRot = axisAngleToQuat(joint->rot);
 
-    std::cout << "Rotation drag.  vec: " << rotationVec << '\n';
+    std::cout << "Rotation drag.  axis: " << globalVec << "  vec: " << rotationVec << '\n';
 }
 
 void setScaleVec(const glm::vec2 &clickPos)
@@ -382,13 +415,13 @@ float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &p
 
     glm::vec2 intersect = p1 + u * (p2 - p1);
     
-    //std::cout << "p1: " << p1 << " p2: " << p2 << " intersect: " << intersect << '\n';
-
     return glm::length(pt - intersect);
 }
 
 void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 {
+    if (dragPos == glm::vec2(HUGE_VAL))
+        return;
     glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
     glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
 
@@ -420,6 +453,8 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 
 void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 {
+    if (dragPos == glm::vec2(HUGE_VAL))
+        return;
     glm::vec2 center(jointNDC[selectedJoint]);
 
     glm::vec2 starting = glm::normalize(dragStart - center);
@@ -512,7 +547,6 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     jointndc = fullTransform * jointndc;
     jointndc /= jointndc.w;
     jointNDC[joint->name] = glm::vec3(jointndc);
-    //std::cout << "joint: " << joint->name << " ndc: " << glm::vec3(jointndc) << '\n';
 
     // No "bone" to draw for root
     if (joint->parent == 255)
@@ -705,6 +739,12 @@ void renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoor
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
+
+
+    // Record
+    axisDir[0] = xdir;
+    axisDir[1] = ydir;
+    axisDir[2] = zdir;
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
