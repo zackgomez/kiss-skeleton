@@ -431,16 +431,6 @@ void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 
     glm::quat newrot = deltarot * startingRot;
 
-    std::cout << "angle: " << angle << '\n';
-    std::cout << "rotvec: " << rotationVec << '\n';
-    std::cout << "rot0: " << startingRot << '\n';
-    std::cout << "rotd: " << deltarot << '\n';
-    std::cout << "rot1: " << newrot << '\n';
-    std::cout << "og  axis angle: " << quatToAxisAngle(startingRot) << '\n';
-    std::cout << "del axis angle: " << quatToAxisAngle(deltarot) << '\n';
-    std::cout << "new axis angle: " << quatToAxisAngle(newrot) << '\n';
-    std::cout << '\n';
-
     JointPose newpose;
     newpose.pos = joint->pos;
     newpose.scale = joint->scale;
