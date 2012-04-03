@@ -20,6 +20,7 @@ static const float arcballRadius = 10.f;
 static const float selectThresh = 0.02f;
 static const float axisLength = 0.10f; // ndc
 static const float circleRadius = 0.15f; //ndc
+static const float scaleCircleRadius = 0.15f; //ndc
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 
 // global vars
@@ -43,6 +44,7 @@ static glm::vec3 translationVec;
 static glm::vec3 rotationVec;
 static glm::quat startingRot;
 // scaling mode variables
+static float selectedJointScale = 1.f;
 
 // Functions
 glm::vec2 clickToScreenPos(int x, int y);
@@ -61,6 +63,7 @@ void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
 static void renderCube();
 void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
 void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const glm::vec3 &p1);
+void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
 void renderCircle(const glm::mat4 &worldTransform);
 void renderHalfCircle(const glm::mat4 &worldTransform);
 void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
@@ -349,6 +352,22 @@ void setRotationVec(const glm::vec2 &clickPos)
 
 void setScaleVec(const glm::vec2 &clickPos)
 {
+    // pixels to NDC
+    const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
+
+    glm::vec3 selJointNDC = jointNDC[selectedJoint];
+
+    glm::vec3 clickNDC(clickPos, selJointNDC.z);
+
+    // First see if they clicked too far away
+    float dist = glm::length(clickNDC - selJointNDC);
+    if (dist > selectedJointScale * (scaleCircleRadius + circleDistThresh) || \
+        dist < selectedJointScale * (scaleCircleRadius - circleDistThresh))
+        return;
+    
+    dragging = true;
+    dragStart = clickPos;
+    startingPos = skeleton->getJoint(selectedJoint)->pos;
 }
 
 float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
@@ -407,6 +426,7 @@ void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
     glm::vec2 current  = glm::normalize(dragPos - center);
 
     float angle = 180.f/M_PI * acosf(glm::dot(starting, current));
+    angle *= glm::sign(glm::cross(glm::vec3(starting, 0.f), glm::vec3(current, 0.f)).z);
     glm::quat deltarot = axisAngleToQuat(glm::vec4(rotationVec, angle));
 
     glm::quat newrot = deltarot * startingRot;
@@ -432,16 +452,14 @@ void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 {
     glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
-    float length = glm::length(joint->pos);
-    glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
-
-    glm::vec4 mouseParentPos(ndcCoord, 1.f);
-    mouseParentPos = glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld) * mouseParentPos;
-    mouseParentPos /= mouseParentPos.w;
 
     float newScale = 1.f;
-    newScale = glm::length(mouseParentPos) - length;
-    //std::cout << newScale << std::endl;
+    glm::vec3 boneCoord = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
+    glm::mat4 bonePosMat = glm::translate(glm::mat4(1.f), boneCoord);
+    glm::vec4 mousePos(ndcCoord, 1.f);
+    mousePos = glm::inverse(getProjectionMatrix() * getViewMatrix() * bonePosMat) * mousePos;
+    mousePos /= mousePos.w;
+    newScale = glm::length(glm::vec3(mousePos));
 
     JointPose pose;
     pose.rot = joint->rot;
@@ -491,7 +509,12 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
         glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
         renderRotationSphere(transform, pos);
     }
-
+    else if (editMode == SCALE_MODE && joint->name == selectedJoint)
+    {
+        selectedJointScale = joint->scale;
+        glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
+        renderScaleCircle(transform * joint->scale, pos);
+    }
     // Record joint NDC coordinates
     glm::mat4 ptrans = getProjectionMatrix();
     glm::mat4 fullTransform = ptrans * transform * joint->worldTransform;
@@ -594,6 +617,31 @@ void renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
+}
+
+void renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &worldCoord)
+{
+    // Render in NDC coordinates, no projection matrix needed
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
+
+    // ndc coord of axis center
+    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
+
+    // render and record an enclosing circle
+    glm::mat4 circleTransform = glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), selectedJointScale * glm::vec3(circleRadius));
+    glColor3f(1.f, 0.5f, 0.5f);
+    renderCircle(circleTransform);
+    // record center ndc coord
+    circleNDC = ndcCoord;
+
+    // Fix matrices
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+
 }
 
 void renderCircle(const glm::mat4 &transform)
@@ -726,3 +774,4 @@ glm::vec4 quatToAxisAngle(const glm::quat &q)
             q.z / sina2,
             angle);
 };
+
