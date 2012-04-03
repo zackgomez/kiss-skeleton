@@ -27,7 +27,6 @@ static Skeleton *skeleton;
 static Arcball *arcball;
 static std::map<std::string, glm::vec3> jointNDC;
 static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
-static glm::vec3 axisDir[3];
 static glm::vec3 circleNDC;  // circle ndc coordinate
 
 // UI vars
@@ -39,13 +38,12 @@ static int editMode = TRANSLATION_MODE;
 
 // translation mode variables
 static glm::vec3 startingPos; // the parent space starting pos of selectedJoint
-static glm::vec3 translationVec;
+static glm::vec3 translationVec(0.f);
 // rotation mode variables
-static glm::vec3 rotationVec;
-static glm::vec4 startingRot;
-static glm::vec3 startingCoord; // the coordinate in joint space of the clicked position
+static glm::vec3 rotationVec(0.f);
 // scaling mode variables
 static float selectedJointScale = 1.f;
+static float startingScale = 1.f;
 
 // Functions
 glm::vec2 clickToScreenPos(int x, int y);
@@ -265,7 +263,7 @@ glm::vec2 clickToScreenPos(int x, int y)
     if (x > windowCoord || y > windowCoord)
         return glm::vec2(HUGE_VAL);
 
-    glm::vec2 screencoord((float)(x) / windowCoord, (float)(y - (windowHeight - windowCoord)) / windowCoord);
+    glm::vec2 screencoord((float)(x - (windowWidth - windowCoord)) / windowCoord, (float)(y - (windowHeight - windowCoord)) / windowCoord);
     screencoord -= glm::vec2(0.5f);
     screencoord *= 2.f;
     screencoord.y = -screencoord.y;
@@ -287,7 +285,9 @@ void setTranslationVec(const glm::vec2 &clickPos)
     // pixels to NDC
     const float axisDistThresh = 5.f / std::max(windowWidth, windowHeight);
     const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
+
     glm::vec3 selJointNDC = jointNDC[selectedJoint];
+
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
 
     // figure out what the vector is (i.e. what they clicked on, if anything)
@@ -326,22 +326,6 @@ void setTranslationVec(const glm::vec2 &clickPos)
 
 void setRotationVec(const glm::vec2 &clickPos)
 {
-    const float axisDistThresh = 5.f / std::max(windowWidth, windowHeight);
-    const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
-    glm::vec3 selJointNDC = jointNDC[selectedJoint];
-    glm::vec3 clickNDC(clickPos, selJointNDC.z);
-
-    float dist = glm::length(clickNDC - selJointNDC);
-    if (dist > circleRadius + circleDistThresh)
-        return;
-
-    // TODO...
-    rotationVec = glm::vec3(1,0,0);
-
-    dragging = true;
-    dragStart = clickPos;
-    startingRot = skeleton->getJoint(selectedJoint)->rot;
-    std::cout << "Rotation drag.  vec: " << rotationVec << '\n';
 }
 
 void setScaleVec(const glm::vec2 &clickPos)
@@ -362,7 +346,7 @@ void setScaleVec(const glm::vec2 &clickPos)
     
     dragging = true;
     dragStart = clickPos;
-    startingPos = skeleton->getJoint(selectedJoint)->pos;
+    startingScale = skeleton->getJoint(selectedJoint)->scale;
 }
 
 float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
@@ -416,22 +400,13 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 {
     glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
-    glm::vec3 viewCoord = applyMatrix(glm::inverse(getProjectionMatrix()), ndcCoord);
-
-    // Right now only supports view based rotation
-    assert(rotationVec == glm::vec3(1,0,0));
 }
 
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 {
-    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
-    float newScale = 1.f;
-    glm::vec3 boneCoord = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
-    glm::mat4 bonePosMat = glm::translate(glm::mat4(1.f), boneCoord);
-    glm::vec4 mousePos(ndcCoord, 1.f);
-    mousePos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * bonePosMat) * mousePos;
-    mousePos /= mousePos.w;
-    newScale = glm::length(glm::vec3(mousePos));
+    glm::vec2 boneNDC(jointNDC[selectedJoint]);
+    bool grow = glm::length(boneNDC - dragStart) < glm::length(boneNDC - dragPos);
+    float newScale = grow ?  startingScale + glm::length(dragStart - dragPos) : startingScale - glm::length(dragStart - dragPos);
 
     JointPose pose;
     pose.rot = joint->rot;
