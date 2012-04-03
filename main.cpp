@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include "arcball.h"
 #include "kiss-skeleton.h"
 
@@ -40,7 +41,12 @@ static int editMode = TRANSLATION_MODE;
 static glm::vec3 startingPos; // the parent space starting pos of selectedJoint
 static glm::vec3 translationVec(0.f);
 // rotation mode variables
+<<<<<<< HEAD
 static glm::vec3 rotationVec(0.f);
+=======
+static glm::vec3 rotationVec;
+static glm::quat startingRot;
+>>>>>>> 01b3703e61068fcd6e65a0184f0070e0f7256827
 // scaling mode variables
 static float selectedJointScale = 1.f;
 static float startingScale = 1.f;
@@ -66,10 +72,16 @@ void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &worldCoo
 void renderCircle(const glm::mat4 &worldTransform);
 void renderHalfCircle(const glm::mat4 &worldTransform);
 void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
-glm::mat4 getModelviewMatrix();
+glm::mat4 getViewMatrix();
 glm::mat4 getProjectionMatrix();
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
 std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
+std::ostream& operator<< (std::ostream& os, const glm::vec4 &v);
+std::ostream& operator<< (std::ostream& os, const glm::quat &v);
+
+// quaternion functions
+glm::quat axisAngleToQuat(const glm::vec4 &axisAngle); // input vec: (axis, angle (deg))
+glm::vec4 quatToAxisAngle(const glm::quat &q); // output vec (axis, angle (deg))
 
 struct EditBoneRenderer : public BoneRenderer
 {
@@ -326,12 +338,31 @@ void setTranslationVec(const glm::vec2 &clickPos)
 
 void setRotationVec(const glm::vec2 &clickPos)
 {
+<<<<<<< HEAD
+=======
+    const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
+    glm::vec3 selJointNDC = jointNDC[selectedJoint];
+    glm::vec3 clickNDC(clickPos, selJointNDC.z);
+    const Joint* joint = skeleton->getJoint(selectedJoint);
+
+    float dist = glm::length(clickNDC - selJointNDC);
+    if (dist > circleRadius + circleDistThresh)
+        return;
+
+    rotationVec = applyMatrix(glm::inverse(joint->worldTransform), glm::vec3(1,0,0), false);
+
+    dragging = true;
+    dragStart = clickPos;
+
+    startingRot = axisAngleToQuat(joint->rot);
+
+    std::cout << "Rotation drag.  vec: " << rotationVec << '\n';
+>>>>>>> 01b3703e61068fcd6e65a0184f0070e0f7256827
 }
 
 void setScaleVec(const glm::vec2 &clickPos)
 {
     // pixels to NDC
-    const float axisDistThresh = 5.f / std::max(windowWidth, windowHeight);
     const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
 
     glm::vec3 selJointNDC = jointNDC[selectedJoint];
@@ -372,7 +403,7 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
     glm::mat4 parentWorld = joint->parent == 255 ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
 
     glm::vec4 mouseParentPos(ndcCoord, 1.f);
-    mouseParentPos = glm::inverse(getProjectionMatrix() * getModelviewMatrix() * parentWorld) * mouseParentPos;
+    mouseParentPos = glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld) * mouseParentPos;
     mouseParentPos /= mouseParentPos.w;
 
     glm::vec3 posDelta = glm::vec3(mouseParentPos) - startingPos;
@@ -399,14 +430,56 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 
 void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 {
+<<<<<<< HEAD
     glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
+=======
+    glm::vec2 center(jointNDC[selectedJoint]);
+
+    glm::vec2 starting = glm::normalize(dragStart - center);
+    glm::vec2 current  = glm::normalize(dragPos - center);
+
+    float angle = 180.f/M_PI * acosf(glm::dot(starting, current));
+    angle *= glm::sign(glm::cross(glm::vec3(starting, 0.f), glm::vec3(current, 0.f)).z);
+    glm::quat deltarot = axisAngleToQuat(glm::vec4(rotationVec, angle));
+
+    glm::quat newrot = deltarot * startingRot;
+
+    std::cout << "angle: " << angle << '\n';
+    std::cout << "rotvec: " << rotationVec << '\n';
+    std::cout << "rot0: " << startingRot << '\n';
+    std::cout << "rotd: " << deltarot << '\n';
+    std::cout << "rot1: " << newrot << '\n';
+    std::cout << "og  axis angle: " << quatToAxisAngle(startingRot) << '\n';
+    std::cout << "del axis angle: " << quatToAxisAngle(deltarot) << '\n';
+    std::cout << "new axis angle: " << quatToAxisAngle(newrot) << '\n';
+    std::cout << '\n';
+
+    JointPose newpose;
+    newpose.pos = joint->pos;
+    newpose.scale = joint->scale;
+    newpose.rot = quatToAxisAngle(newrot);
+
+    skeleton->setPose(selectedJoint, &newpose);
+>>>>>>> 01b3703e61068fcd6e65a0184f0070e0f7256827
 }
 
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 {
+<<<<<<< HEAD
     glm::vec2 boneNDC(jointNDC[selectedJoint]);
     bool grow = glm::length(boneNDC - dragStart) < glm::length(boneNDC - dragPos);
     float newScale = grow ?  startingScale + glm::length(dragStart - dragPos) : startingScale - glm::length(dragStart - dragPos);
+=======
+    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
+
+    float newScale = 1.f;
+    glm::vec3 boneCoord = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
+    glm::mat4 bonePosMat = glm::translate(glm::mat4(1.f), boneCoord);
+    glm::vec4 mousePos(ndcCoord, 1.f);
+    mousePos = glm::inverse(getProjectionMatrix() * getViewMatrix() * bonePosMat) * mousePos;
+    mousePos /= mousePos.w;
+    newScale = glm::length(glm::vec3(mousePos));
+>>>>>>> 01b3703e61068fcd6e65a0184f0070e0f7256827
 
     JointPose pose;
     pose.rot = joint->rot;
@@ -500,7 +573,7 @@ glm::mat4 getProjectionMatrix()
     return arcball->getProjectionMatrix();
 }
 
-glm::mat4 getModelviewMatrix()
+glm::mat4 getViewMatrix()
 {
     return arcball->getViewMatrix();
 }
@@ -524,10 +597,6 @@ void renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
 
     // ndc coord of axis center
     glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
-
-    glm::mat4 axisTransform = glm::scale(
-            glm::rotate(glm::translate(glm::mat4(1.f), ndcCoord), 0.f, glm::vec3(0,0,1)),
-            glm::vec3(1.f));
 
     glm::vec3 xdir = applyMatrix(getProjectionMatrix() * transform, glm::vec3(1,0,0), false);
     glm::vec3 ydir = applyMatrix(getProjectionMatrix() * transform, glm::vec3(0,1,0), false);
@@ -679,3 +748,50 @@ std::ostream& operator<< (std::ostream& os, const glm::vec3 &v)
     os << v.x << ' ' << v.y << ' ' << v.z;
     return os;
 }
+
+std::ostream& operator<< (std::ostream& os, const glm::vec4 &v)
+{
+    os << v.x << ' ' << v.y << ' ' << v.z << ' ' << v.w;
+    return os;
+}
+
+std::ostream& operator<< (std::ostream& os, const glm::quat &v)
+{
+    os << v.x << ' ' << v.y << ' ' << v.z << ' ' << v.w;
+    return os;
+}
+
+// Quaternion operations follow...
+glm::quat axisAngleToQuat(const glm::vec4 &a)
+{
+    /* 
+     * qx = ax * sin(angle/2)
+     * qy = ay * sin(angle/2)
+     * qz = az * sin(angle/2)
+     * qw = cos(angle/2)
+     */
+
+    float angle = M_PI/180.f * a.w;
+    float sina = sinf(angle/2.f);
+    float cosa = cosf(angle/2.f);
+
+    // CAREFUL: w, x, y, z
+    return glm::quat(cosa, a.x * sina, a.y * sina, a.z * sina);
+}
+
+glm::vec4 quatToAxisAngle(const glm::quat &q)
+{
+    float angle = 2.f * acosf(q.w);
+    float sina2 = sinf(angle/2.f);
+    angle *= 180.f/M_PI;
+
+    if (sina2 == 0.f)
+        return glm::vec4(0, 0, 1, angle);
+
+    return glm::vec4(
+            q.x / sina2,
+            q.y / sina2,
+            q.z / sina2,
+            angle);
+};
+
