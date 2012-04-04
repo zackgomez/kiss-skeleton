@@ -16,7 +16,6 @@
 
 // constants
 static int windowWidth = 800, windowHeight = 600;
-static int windowCoord = 600;
 static const float arcballRadius = 10.f;
 static const float selectThresh = 0.02f;
 static const float axisLength = 0.10f; // ndc
@@ -38,6 +37,7 @@ static std::string selectedJoint;
 static glm::vec2 dragStart;
 static bool rotating = false;
 static bool dragging = false;
+static bool zooming  = false;
 static int editMode = TRANSLATION_MODE;
 
 // translation mode variables
@@ -106,8 +106,12 @@ void redraw(void)
     {
         glColor3f(1.f, 1.f, 1.f);
         renderPoints(viewMatrix, mesh->verts, mesh->nverts);
-        glColor4f(0.8f, 
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glColor4f(0.8f, 0.4f, 0.2f, 0.5f);
         renderRawMesh(viewMatrix, mesh);
+        glDisable(GL_BLEND);
     }
 
     glutSwapBuffers();
@@ -118,12 +122,10 @@ void reshape(int width, int height)
     if (width <= 0 || height <= 0)
         return;
 
-    windowCoord = std::min(width, height);
-
     windowWidth = width;
     windowHeight = height;
 
-    glViewport(0, 0, windowCoord, windowCoord);
+    glViewport(0, 0, windowWidth, windowHeight);
 
     arcball->setAspect(1.f);
 }
@@ -143,6 +145,8 @@ void mouse(int button, int state, int x, int y)
         if (selectedJoint.empty()) return;
 
         glm::vec2 clickPos = clickToScreenPos(x, y);
+        if (clickPos == glm::vec2(HUGE_VAL))
+            return;
         if (editMode == TRANSLATION_MODE)
             setTranslationVec(clickPos);
         else if (editMode == ROTATION_MODE)
@@ -178,12 +182,17 @@ void mouse(int button, int state, int x, int y)
     {
         if (state == GLUT_DOWN)
         {
-            glm::vec3 ndc(clickToScreenPos(x, y), 0.f);
+            if (glutGetModifiers(GLUT_
+            glm::vec2 screenPos = clickToScreenPos(x, y);
+            glm::vec3 ndc(screenPos, 0.f);
             arcball->start(ndc);
             rotating = true;
         }
         else
+        {
             rotating = false;
+            zooming = false;
+        }
     }
     // Mouse wheel (buttons 3 and 4) zooms in an out (translates camera)
     else if (button == 3 || button == 4)
@@ -286,10 +295,7 @@ int main(int argc, char **argv)
 
 glm::vec2 clickToScreenPos(int x, int y)
 {
-    if (x > windowCoord || y > windowCoord)
-        return glm::vec2(HUGE_VAL);
-
-    glm::vec2 screencoord((float)(x - (windowWidth - windowCoord)) / windowCoord, (float)(y - (windowHeight - windowCoord)) / windowCoord);
+    glm::vec2 screencoord((float)x / windowWidth, (float)y / windowHeight);
     screencoord -= glm::vec2(0.5f);
     screencoord *= 2.f;
     screencoord.y = -screencoord.y;
@@ -311,6 +317,7 @@ void setTranslationVec(const glm::vec2 &clickPos)
     // pixels to NDC
     const float axisDistThresh = 5.f / std::max(windowWidth, windowHeight);
     const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
+    const Joint *joint = skeleton->getJoint(selectedJoint);
 
     glm::vec3 selJointNDC = jointNDC[selectedJoint];
 
@@ -340,14 +347,15 @@ void setTranslationVec(const glm::vec2 &clickPos)
 
     // If they choose an axis translation vector, we need to make sure that it's in the
     // correct (parent) space
-    glm::mat4 parentTransform = skeleton->getJoint(skeleton->getJoint(selectedJoint)->parent)->worldTransform;
+    glm::mat4 parentTransform = joint->parent == Skeleton::ROOT_PARENT ?
+        glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
     translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
 
     // If we got here, then it's a valid drag and translationVec is already set
     std::cout << "Translation drag.  vec: " << translationVec << '\n';
     dragging = true;
     dragStart = clickPos;
-    startingPos = skeleton->getJoint(selectedJoint)->pos;
+    startingPos = joint->pos;
 }
 
 void setRotationVec(const glm::vec2 &clickPos)
@@ -774,8 +782,7 @@ void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
     glLoadMatrixf(glm::value_ptr(transform));
     glEnableClientState(GL_VERTEX_ARRAY);
     glVertexPointer(4, GL_FLOAT, sizeof(vert), mesh->verts + offsetof(vert, pos));
-    glDrawElements(GL_TRIANGLES, mesh->nfaces, GL_UNSIGNED_INT, mesh->faces);
-
+    glDrawElements(GL_TRIANGLES, 3*mesh->nfaces, GL_UNSIGNED_INT, mesh->faces);
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 

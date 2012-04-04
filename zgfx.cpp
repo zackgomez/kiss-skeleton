@@ -59,6 +59,8 @@ rawmesh* loadRawMesh(const char *filename)
             faces[facei].verts[0] = parseFaceVert(strtok(NULL, " "));
             faces[facei].verts[1] = parseFaceVert(strtok(NULL, " "));
             faces[facei].verts[2] = parseFaceVert(strtok(NULL, " "));
+            printf("face: %d %d %d\n", faces[facei].verts[0],
+                    faces[facei].verts[1], faces[facei].verts[2]);
             ++facei;
         }
     }
