@@ -48,37 +48,36 @@ static glm::quat startingRot;
 static float selectedJointScale = 1.f;
 
 // Functions
-glm::vec2 clickToScreenPos(int x, int y);
-glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homogenous = true);
-void setTranslationVec(const glm::vec2 &clickPos);
-void setRotationVec(const glm::vec2 &clickPos);
-void setScaleVec(const glm::vec2 &clickPos);
+static glm::vec2 clickToScreenPos(int x, int y);
+static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homogenous = true);
+static void setTranslationVec(const glm::vec2 &clickPos);
+static void setRotationVec(const glm::vec2 &clickPos);
+static void setScaleVec(const glm::vec2 &clickPos);
 // p1 and p2 determine the line, pt is the point to get distance for
 // if the point is not between the line segment, then HUGE_VAL is returned
-float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
+static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
 
-void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
-void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
-void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
+static void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
+static void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
+static void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
 
 static void renderCube();
-void renderJoint(const glm::mat4 &viewTransform, const Joint* joint, const std::vector<Joint*> joints);
-void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
-void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const glm::vec3 &p1);
-void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
-void renderCircle(const glm::mat4 &worldTransform);
-void renderHalfCircle(const glm::mat4 &worldTransform);
-void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
-glm::mat4 getViewMatrix();
-glm::mat4 getProjectionMatrix();
+static void renderJoint(const glm::mat4 &viewTransform, const Joint* joint, const std::vector<Joint*> joints);
+static void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
+static void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const glm::vec3 &p1);
+static void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
+static void renderCircle(const glm::mat4 &worldTransform);
+static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
+static glm::mat4 getViewMatrix();
+static glm::mat4 getProjectionMatrix();
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
 std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
 std::ostream& operator<< (std::ostream& os, const glm::vec4 &v);
 std::ostream& operator<< (std::ostream& os, const glm::quat &v);
 
 // quaternion functions
-glm::quat axisAngleToQuat(const glm::vec4 &axisAngle); // input vec: (axis, angle (deg))
-glm::vec4 quatToAxisAngle(const glm::quat &q); // output vec (axis, angle (deg))
+static glm::quat axisAngleToQuat(const glm::vec4 &axisAngle); // input vec: (axis, angle (deg))
+static glm::vec4 quatToAxisAngle(const glm::quat &q); // output vec (axis, angle (deg))
 
 void redraw(void)
 {
