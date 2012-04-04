@@ -430,12 +430,17 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
     glm::vec3 mouseParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
             glm::vec3(dragPos, jointNDC[selectedJoint].z));
 
-    // Delta is trivial to compute
-    glm::vec3 deltaPos = mouseParentPos - startParentPos;
     // project on translation vector if necessary
     if (translationVec != glm::vec3(0.f))
-        deltaPos = glm::dot(deltaPos, translationVec) * translationVec;
+    {
+        startParentPos = glm::dot(startParentPos, translationVec) * translationVec;
+        mouseParentPos = glm::dot(mouseParentPos, translationVec) * translationVec;
+    }
 
+    // Delta is trivial to compute now
+    glm::vec3 deltaPos = mouseParentPos - startParentPos;
+
+    // Finally, set the joint pose
     JointPose pose;
     pose.rot = joint->rot;
     pose.scale = joint->scale;
