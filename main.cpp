@@ -474,11 +474,7 @@ void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 {
     glm::vec2 boneNDC(jointNDC[selectedJoint]);
-    bool grow = glm::length(boneNDC - dragStart) < glm::length(boneNDC - dragPos);
-    float newScale = grow ?  startingScale * (1 + glm::length(dragStart - dragPos) / scaleCircleRadius) : 
-                             startingScale * (1 - glm::length(dragStart - dragPos) / scaleCircleRadius) ;
-    glm::vec3 p0(dragStart, 1.f);
-    glm::vec3 p1(dragPos, 1.f);
+    float newScale = glm::length(dragPos - boneNDC) / scaleCircleRadius;
     JointPose pose;
     pose.rot = joint->rot;
     pose.pos = joint->pos;
