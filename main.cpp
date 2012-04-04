@@ -48,41 +48,36 @@ static glm::quat startingRot;
 static float startingScale = 1.f;
 
 // Functions
-glm::vec2 clickToScreenPos(int x, int y);
-glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homogenous = true);
-void setTranslationVec(const glm::vec2 &clickPos);
-void setRotationVec(const glm::vec2 &clickPos);
-void setScaleVec(const glm::vec2 &clickPos);
+static glm::vec2 clickToScreenPos(int x, int y);
+static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homogenous = true);
+static void setTranslationVec(const glm::vec2 &clickPos);
+static void setRotationVec(const glm::vec2 &clickPos);
+static void setScaleVec(const glm::vec2 &clickPos);
 // p1 and p2 determine the line, pt is the point to get distance for
 // if the point is not between the line segment, then HUGE_VAL is returned
-float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
+static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
 
-void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
-void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
-void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
+static void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
+static void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
+static void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
 
 static void renderCube();
-void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
-void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const glm::vec3 &p1);
-void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
-void renderCircle(const glm::mat4 &worldTransform);
-void renderHalfCircle(const glm::mat4 &worldTransform);
-void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
-glm::mat4 getViewMatrix();
-glm::mat4 getProjectionMatrix();
+static void renderJoint(const glm::mat4 &viewTransform, const Joint* joint, const std::vector<Joint*> joints);
+static void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
+static void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const glm::vec3 &p1);
+static void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
+static void renderCircle(const glm::mat4 &worldTransform);
+static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
+static glm::mat4 getViewMatrix();
+static glm::mat4 getProjectionMatrix();
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
 std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
 std::ostream& operator<< (std::ostream& os, const glm::vec4 &v);
 std::ostream& operator<< (std::ostream& os, const glm::quat &v);
 
 // quaternion functions
-glm::quat axisAngleToQuat(const glm::vec4 &axisAngle); // input vec: (axis, angle (deg))
-glm::vec4 quatToAxisAngle(const glm::quat &q); // output vec (axis, angle (deg))
-
-struct EditBoneRenderer : public BoneRenderer
-{
-    virtual void operator() (const glm::mat4 &transform, const Joint* b, const std::vector<Joint*> joints);
-};
+static glm::quat axisAngleToQuat(const glm::vec4 &axisAngle); // input vec: (axis, angle (deg))
+static glm::vec4 quatToAxisAngle(const glm::quat &q); // output vec (axis, angle (deg))
 
 void redraw(void)
 {
@@ -97,7 +92,9 @@ void redraw(void)
     glm::mat4 viewMatrix = arcball->getViewMatrix();
     glLoadMatrixf(glm::value_ptr(viewMatrix));
 
-    skeleton->render(viewMatrix);
+    const std::vector<Joint*> joints = skeleton->getJoints();
+    for (size_t i = 0; i < joints.size(); i++)
+        renderJoint(viewMatrix, joints[i], joints);
 
     glutSwapBuffers();
 }
@@ -256,7 +253,6 @@ int main(int argc, char **argv)
     std::string bonefile = "stickman.bones";
     skeleton = new Skeleton();
     skeleton->readSkeleton(bonefile);
-    skeleton->setBoneRenderer(new EditBoneRenderer());
 
     // --------------------
     // END MY SETUP
@@ -313,17 +309,17 @@ void setTranslationVec(const glm::vec2 &clickPos)
     else if (pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[2]), glm::vec2(clickNDC)) < axisDistThresh)
         translationVec.z = 1.f;
 
-    std::cout << "Xdist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[0]), glm::vec2(clickNDC))
-        << "  Ydist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC))
-        << "  Zdist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC))
-        << "  dist:  " << dist << '\n';
-
     // Now the vector is either set, or they didn't click on an axis vector
     // Check for circle click by just seeing if they clicked close to the radius
     // if it's not circle click, no drag
     if (translationVec == glm::vec3(0.f) &&
             (dist < circleRadius - circleDistThresh || dist > circleRadius + circleDistThresh))
         return;
+
+    // If they choose an axis translation vector, we need to make sure that it's in the
+    // correct (parent) space
+    glm::mat4 parentTransform = skeleton->getJoint(skeleton->getJoint(selectedJoint)->parent)->worldTransform;
+    translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
 
     // If we got here, then it's a valid drag and translationVec is already set
     std::cout << "Translation drag.  vec: " << translationVec << '\n';
@@ -427,19 +423,27 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
         return;
     glm::mat4 parentWorld = joint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
 
-    glm::vec2 dragDelta = dragPos - dragStart;
-    glm::vec3 worldDelta = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix()),
-            glm::vec3(dragDelta, 0.f), false);
+    // Get the positions of the two mouse positions in parent joint space
+    glm::vec3 startParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
+            glm::vec3(dragStart, jointNDC[selectedJoint].z));
+    glm::vec3 mouseParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
+            glm::vec3(dragPos, jointNDC[selectedJoint].z));
+
+    // project on translation vector if necessary
     if (translationVec != glm::vec3(0.f))
-        worldDelta = glm::dot(worldDelta, translationVec) * translationVec;
-    glm::vec3 parentDelta = applyMatrix(glm::inverse(parentWorld), worldDelta, false);
+    {
+        startParentPos = glm::dot(startParentPos, translationVec) * translationVec;
+        mouseParentPos = glm::dot(mouseParentPos, translationVec) * translationVec;
+    }
 
-    glm::vec3 newPos = startingPos + parentDelta;
+    // Delta is trivial to compute now
+    glm::vec3 deltaPos = mouseParentPos - startParentPos;
 
+    // Finally, set the joint pose
     JointPose pose;
     pose.rot = joint->rot;
     pose.scale = joint->scale;
-    pose.pos = newPos;
+    pose.pos = startingPos + deltaPos;
     skeleton->setPose(selectedJoint, &pose);
 }
 
@@ -500,7 +504,7 @@ static void renderCube()
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* joint,
+void renderJoint(const glm::mat4 &transform, const Joint* joint,
         const std::vector<Joint*> joints)
 {
     // Draw cube

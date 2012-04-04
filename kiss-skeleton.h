@@ -29,31 +29,15 @@ struct SkeletonPose
     std::vector<JointPose*> poses;
 };
 
-// Callback functor for render each bone.
-// 
-struct BoneRenderer
-{
-    virtual void operator() (const glm::mat4 &transform, const Joint* b, const std::vector<Joint*> joints) = 0;
-};
-
-struct SimpleBoneRenderer : public BoneRenderer
-{
-    virtual void operator() (const glm::mat4 &transform, const Joint* b, const std::vector<Joint*> joints);
-};
-
 class Skeleton
 {
 public:
     Skeleton();
     ~Skeleton();
 
-    void render(const glm::mat4 &transform) const;
-
-    void setBoneRenderer(BoneRenderer *renderer);
-    void setDefaultRenderer();
-
     void readSkeleton(const std::string &filename);
 
+    const std::vector<Joint*> getJoints() const;
     const Joint* getJoint(const std::string &name) const;
     const Joint* getJoint(unsigned index) const;
     void setPose(const std::string& name, const JointPose *pose);
@@ -63,8 +47,6 @@ public:
 
 private:
     std::vector<Joint*> joints_;
-
-    BoneRenderer *renderer_;
 
     void setWorldTransform(Joint* bone);
     void readJoint(const std::string &jointstr);

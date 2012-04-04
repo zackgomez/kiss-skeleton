@@ -8,8 +8,7 @@
 
 const unsigned Skeleton::ROOT_PARENT = 255;
 
-Skeleton::Skeleton() :
-    renderer_(new SimpleBoneRenderer())
+Skeleton::Skeleton()
 {
 }
 
@@ -19,15 +18,6 @@ Skeleton::~Skeleton()
     for (size_t i = 0; i < joints_.size(); i++)
         delete joints_[i];
     joints_.clear();
-}
-
-void Skeleton::render(const glm::mat4 &transform) const
-{
-    assert(joints_.size() > 0);
-
-    // don't render root bone
-    for (size_t i = 0; i < joints_.size(); i++)
-        (*renderer_)(transform, joints_[i], joints_);
 }
 
 void Skeleton::readJoint(const std::string &bonestr)
@@ -72,6 +62,11 @@ void Skeleton::readSkeleton(const std::string &filename)
     }
 }
 
+const std::vector<Joint*> Skeleton::getJoints() const
+{
+    return joints_;
+}
+
 const Joint* Skeleton::getJoint(const std::string &name) const
 {
     for (size_t i = 0; i < joints_.size(); i++)
@@ -107,18 +102,6 @@ void Skeleton::setPose(const std::string &name, const JointPose *pose)
         setWorldTransform(joints_[i]);
 }
 
-void Skeleton::setBoneRenderer(BoneRenderer *br)
-{
-    delete renderer_;
-    renderer_ = br;
-}
-
-void Skeleton::setDefaultRenderer()
-{
-    delete renderer_;
-    renderer_ = new SimpleBoneRenderer();
-}
-
 void Skeleton::setWorldTransform(Joint *joint)
 {
     // Set transform as pa
@@ -141,56 +124,5 @@ void Skeleton::setWorldTransform(Joint *joint)
     transform = glm::scale(transform, glm::vec3(joint->scale));
 
     joint->worldTransform = transform;
-}
-
-static GLfloat cube_verts[] = {
-    1,1,1,    -1,1,1,   -1,-1,1,  1,-1,1,        // v0-v1-v2-v3
-    1,1,1,    1,-1,1,   1,-1,-1,  1,1,-1,        // v0-v3-v4-v5
-    1,1,1,    1,1,-1,   -1,1,-1,  -1,1,1,        // v0-v5-v6-v1
-    -1,1,1,   -1,1,-1,  -1,-1,-1, -1,-1,1,    // v1-v6-v7-v2
-    -1,-1,-1, 1,-1,-1,  1,-1,1,   -1,-1,1,    // v7-v4-v3-v2
-    1,-1,-1,  -1,-1,-1, -1,1,-1,  1,1,-1};   // v4-v7-v6-v5
-
-static void renderCube()
-{
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glVertexPointer(3, GL_FLOAT, 0, cube_verts);
-
-    glDrawArrays(GL_QUADS, 0, 24);
-
-    glDisableClientState(GL_VERTEX_ARRAY);
-}
-
-void SimpleBoneRenderer::operator() (const glm::mat4 &transform, const Joint* joint,
-        const std::vector<Joint*> joints)
-{
-    // Draw cube
-    glLoadMatrixf(glm::value_ptr(glm::scale(transform * joint->worldTransform,
-                    glm::vec3(0.08f))));
-    glColor3f(1,1,1);
-    renderCube();
-
-    // No "bone" to draw for root
-    if (joint->parent == 255)
-        return;
-
-    glLoadMatrixf(glm::value_ptr(transform));
-
-    glm::mat4 parentTransform = joints[joint->parent]->worldTransform;
-    glm::mat4 boneTransform = joint->worldTransform;
-
-    glm::vec4 start(0, 0, 0, 1), end(0, 0, 0, 1);
-    start = parentTransform * start;
-    start /= start.w;
-    end = boneTransform * end;
-    end /= end.w;
-
-    glBegin(GL_LINES);
-    glColor3f(1, 0, 0);
-    glVertex4fv(&start.x);
-
-    glColor3f(0, 1, 0);
-    glVertex4fv(&end.x);
-    glEnd();
 }
 
