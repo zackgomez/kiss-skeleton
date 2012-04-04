@@ -45,7 +45,6 @@ static glm::vec3 translationVec(0.f);
 static glm::vec3 rotationVec;
 static glm::quat startingRot;
 // scaling mode variables
-static float selectedJointScale = 1.f;
 static float startingScale = 1.f;
 
 // Functions
@@ -399,10 +398,8 @@ void setScaleVec(const glm::vec2 &clickPos)
 
     // First see if they clicked too far away
     float dist = glm::length(clickNDC - selJointNDC);
-    if (dist > selectedJointScale * (scaleCircleRadius + circleDistThresh) || \
-        dist < selectedJointScale * (scaleCircleRadius - circleDistThresh))
+    if (dist > scaleCircleRadius + circleDistThresh || dist < scaleCircleRadius - circleDistThresh)
         return;
-    
     dragging = true;
     dragStart = clickPos;
     startingScale = skeleton->getJoint(selectedJoint)->scale;
@@ -474,8 +471,10 @@ void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 {
     glm::vec2 boneNDC(jointNDC[selectedJoint]);
     bool grow = glm::length(boneNDC - dragStart) < glm::length(boneNDC - dragPos);
-    float newScale = grow ?  startingScale + glm::length(dragStart - dragPos) : startingScale - glm::length(dragStart - dragPos);
-
+    float newScale = grow ?  startingScale * (1 + glm::length(dragStart - dragPos) / scaleCircleRadius) : 
+                             startingScale * (1 - glm::length(dragStart - dragPos) / scaleCircleRadius) ;
+    glm::vec3 p0(dragStart, 1.f);
+    glm::vec3 p1(dragPos, 1.f);
     JointPose pose;
     pose.rot = joint->rot;
     pose.pos = joint->pos;
@@ -526,7 +525,6 @@ void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* join
     }
     else if (editMode == SCALE_MODE && joint->name == selectedJoint)
     {
-        selectedJointScale = joint->scale;
         glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
         renderScaleCircle(transform * joint->scale, pos);
     }
@@ -645,7 +643,7 @@ void renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &worldCoord)
     glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
 
     // render and record an enclosing circle
-    glm::mat4 circleTransform = glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), selectedJointScale * glm::vec3(circleRadius));
+    glm::mat4 circleTransform = glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), glm::vec3(scaleCircleRadius));
     glColor3f(1.f, 0.5f, 0.5f);
     renderCircle(circleTransform);
     // record center ndc coord
