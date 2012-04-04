@@ -307,17 +307,17 @@ void setTranslationVec(const glm::vec2 &clickPos)
     else if (pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[2]), glm::vec2(clickNDC)) < axisDistThresh)
         translationVec.z = 1.f;
 
-    std::cout << "Xdist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[0]), glm::vec2(clickNDC))
-        << "  Ydist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC))
-        << "  Zdist: " << pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC))
-        << "  dist:  " << dist << '\n';
-
     // Now the vector is either set, or they didn't click on an axis vector
     // Check for circle click by just seeing if they clicked close to the radius
     // if it's not circle click, no drag
     if (translationVec == glm::vec3(0.f) &&
             (dist < circleRadius - circleDistThresh || dist > circleRadius + circleDistThresh))
         return;
+
+    // If they choose an axis translation vector, we need to make sure that it's in the
+    // correct (parent) space
+    glm::mat4 parentTransform = skeleton->getJoint(skeleton->getJoint(selectedJoint)->parent)->worldTransform;
+    translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
 
     // If we got here, then it's a valid drag and translationVec is already set
     std::cout << "Translation drag.  vec: " << translationVec << '\n';
@@ -424,19 +424,22 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
         return;
     glm::mat4 parentWorld = joint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
 
-    glm::vec2 dragDelta = dragPos - dragStart;
-    glm::vec3 worldDelta = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix()),
-            glm::vec3(dragDelta, 0.f), false);
-    if (translationVec != glm::vec3(0.f))
-        worldDelta = glm::dot(worldDelta, translationVec) * translationVec;
-    glm::vec3 parentDelta = applyMatrix(glm::inverse(parentWorld), worldDelta, false);
+    // Get the positions of the two mouse positions in parent joint space
+    glm::vec3 startParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
+            glm::vec3(dragStart, jointNDC[selectedJoint].z));
+    glm::vec3 mouseParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
+            glm::vec3(dragPos, jointNDC[selectedJoint].z));
 
-    glm::vec3 newPos = startingPos + parentDelta;
+    // Delta is trivial to compute
+    glm::vec3 deltaPos = mouseParentPos - startParentPos;
+    // project on translation vector if necessary
+    if (translationVec != glm::vec3(0.f))
+        deltaPos = glm::dot(deltaPos, translationVec) * translationVec;
 
     JointPose pose;
     pose.rot = joint->rot;
     pose.scale = joint->scale;
-    pose.pos = newPos;
+    pose.pos = startingPos + deltaPos;
     skeleton->setPose(selectedJoint, &pose);
 }
 
