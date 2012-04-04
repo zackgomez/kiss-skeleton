@@ -62,6 +62,7 @@ void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
 
 static void renderCube();
+void renderJoint(const glm::mat4 &viewTransform, const Joint* joint, const std::vector<Joint*> joints);
 void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
 void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const glm::vec3 &p1);
 void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
@@ -79,11 +80,6 @@ std::ostream& operator<< (std::ostream& os, const glm::quat &v);
 glm::quat axisAngleToQuat(const glm::vec4 &axisAngle); // input vec: (axis, angle (deg))
 glm::vec4 quatToAxisAngle(const glm::quat &q); // output vec (axis, angle (deg))
 
-struct EditBoneRenderer : public BoneRenderer
-{
-    virtual void operator() (const glm::mat4 &transform, const Joint* b, const std::vector<Joint*> joints);
-};
-
 void redraw(void)
 {
     // Now render
@@ -97,7 +93,9 @@ void redraw(void)
     glm::mat4 viewMatrix = arcball->getViewMatrix();
     glLoadMatrixf(glm::value_ptr(viewMatrix));
 
-    skeleton->render(viewMatrix);
+    const std::vector<Joint*> joints = skeleton->getJoints();
+    for (size_t i = 0; i < joints.size(); i++)
+        renderJoint(viewMatrix, joints[i], joints);
 
     glutSwapBuffers();
 }
@@ -256,7 +254,6 @@ int main(int argc, char **argv)
     std::string bonefile = "stickman.bones";
     skeleton = new Skeleton();
     skeleton->readSkeleton(bonefile);
-    skeleton->setBoneRenderer(new EditBoneRenderer());
 
     // --------------------
     // END MY SETUP
@@ -504,7 +501,7 @@ static void renderCube()
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void EditBoneRenderer::operator() (const glm::mat4 &transform, const Joint* joint,
+void renderJoint(const glm::mat4 &transform, const Joint* joint,
         const std::vector<Joint*> joints)
 {
     // Draw cube
