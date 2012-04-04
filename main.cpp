@@ -12,6 +12,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include "arcball.h"
 #include "kiss-skeleton.h"
+#include "zgfx.h"
 
 // constants
 static int windowWidth = 800, windowHeight = 600;
@@ -26,6 +27,7 @@ static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 // global vars
 static Skeleton *skeleton;
 static Arcball *arcball;
+static rawmesh *mesh;
 static std::map<std::string, glm::vec3> jointNDC;
 static glm::vec3 axisDir[3]; // x,y,z axis directions
 static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
@@ -68,6 +70,8 @@ static void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const gl
 static void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
 static void renderCircle(const glm::mat4 &worldTransform);
 static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
+static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
+static void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh);
 static glm::mat4 getViewMatrix();
 static glm::mat4 getProjectionMatrix();
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
@@ -92,9 +96,19 @@ void redraw(void)
     glm::mat4 viewMatrix = arcball->getViewMatrix();
     glLoadMatrixf(glm::value_ptr(viewMatrix));
 
+    // Render the joints
     const std::vector<Joint*> joints = skeleton->getJoints();
     for (size_t i = 0; i < joints.size(); i++)
         renderJoint(viewMatrix, joints[i], joints);
+
+    // And the mesh
+    if (mesh)
+    {
+        glColor3f(1.f, 1.f, 1.f);
+        renderPoints(viewMatrix, mesh->verts, mesh->nverts);
+        glColor4f(0.8f, 
+        renderRawMesh(viewMatrix, mesh);
+    }
 
     glutSwapBuffers();
 }
@@ -225,6 +239,10 @@ void keyboard(GLubyte key, GLint x, GLint y)
 
 int main(int argc, char **argv)
 {
+    char *objfile = NULL;
+    if (argc == 2)
+        objfile = argv[1];
+
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
 
@@ -244,15 +262,19 @@ int main(int argc, char **argv)
 
     glEnable(GL_DEPTH_TEST);
 
-    arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
-
     // --------------------
     // START MY SETUP
     // --------------------
 
+    arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
+
     std::string bonefile = "stickman.bones";
     skeleton = new Skeleton();
     skeleton->readSkeleton(bonefile);
+
+    mesh = NULL;
+    if (objfile)
+        mesh = loadRawMesh(objfile);
 
     // --------------------
     // END MY SETUP
@@ -372,7 +394,7 @@ void setRotationVec(const glm::vec2 &clickPos)
 
     // Transform the rotation vector into parent space so that the transformation
     // is around the global axes
-    glm::mat4 parentTransform = skeleton->getJoint(joint->parent)->worldTransform;
+    glm::mat4 parentTransform = joint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
     rotationVec = applyMatrix(glm::inverse(parentTransform), globalVec, false);
     // Save startign rotation as quat
     startingRot = axisAngleToQuat(joint->rot);
@@ -733,6 +755,28 @@ void renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoor
     axisDir[0] = xdir;
     axisDir[1] = ydir;
     axisDir[2] = zdir;
+}
+
+void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)
+{
+    glLoadMatrixf(glm::value_ptr(transform));
+
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(4, GL_FLOAT, sizeof(vert), verts + offsetof(vert, pos));
+
+    glDrawArrays(GL_POINTS, 0, nverts);
+    glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
+{
+    glDisable(GL_CULL_FACE);
+    glLoadMatrixf(glm::value_ptr(transform));
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(4, GL_FLOAT, sizeof(vert), mesh->verts + offsetof(vert, pos));
+    glDrawElements(GL_TRIANGLES, mesh->nfaces, GL_UNSIGNED_INT, mesh->faces);
+
+    glDisableClientState(GL_VERTEX_ARRAY);
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
