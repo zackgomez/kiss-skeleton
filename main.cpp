@@ -159,7 +159,7 @@ void reshape(int width, int height)
 
     glViewport(0, 0, windowWidth, windowHeight);
 
-    arcball->setAspect(1.f);
+    arcball->setAspect((float) windowWidth / windowHeight);
 }
 
 void mouse(int button, int state, int x, int y)
@@ -340,7 +340,7 @@ int main(int argc, char **argv)
 {
     if (argc < 2)
     {
-        printf("usage: %s: BONESFILE [OBJFILE]\n");
+        printf("usage: %s: BONESFILE [OBJFILE]\n", argv[0]);
         exit(1);
     }
     skelfile = argv[1];
