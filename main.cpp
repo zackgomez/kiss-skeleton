@@ -67,6 +67,7 @@ static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::
 
 static void autoSkinMesh();
 static SkeletonPose* currentPose();
+static void writeSkeleton(const char *filename); // writes the current bind position as skeleton
 
 static void setTranslationVec(const glm::vec2 &clickPos);
 static void setRotationVec(const glm::vec2 &clickPos);
@@ -329,6 +330,7 @@ void keyboard(GLubyte key, GLint x, GLint y)
     if (key == 'x' && mesh)
     {
         writeRawMesh(mesh, "mesh.out.obj");
+        writeSkeleton("skeleton.out.bones");
     }
     // Update display...
     glutPostRedisplay();
@@ -337,8 +339,11 @@ void keyboard(GLubyte key, GLint x, GLint y)
 int main(int argc, char **argv)
 {
     char *objfile = NULL;
-    if (argc == 2)
-        objfile = argv[1];
+    if (argc < 2)
+    {
+        printf("usage: %s: BONESFILE [OBJFILE]\n");
+        exit(1);
+    }
 
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
@@ -460,6 +465,31 @@ SkeletonPose* currentPose()
     }
 
     return pose;
+}
+
+void writeSkeleton(const char *filename)
+{
+    FILE *f = fopen(filename, "w");
+    if (!f)
+    {
+        fprintf(stderr, "Unable to open %s for writing.\n", filename);
+        return;
+    }
+
+    const std::vector<JointPose*> poses = bindPose->poses;
+    for (size_t i = 0; i < poses.size(); i++)
+    {
+        const Joint *j = skeleton->getJoint(i);
+        const JointPose *p = poses[i];
+        // format is:
+        // name(s) pos(3f) rot(4f) scale(1f) parent(1i)
+        fprintf(f, "%s   %f %f %f   %f %f %f %f   %f %d\n",
+                j->name.c_str(), p->pos[0], p->pos[1], p->pos[2],
+                p->rot[0], p->rot[1], p->rot[2], p->rot[3],
+                p->scale, j->parent);
+    }
+
+    fclose(f);
 }
 
 void setTranslationVec(const glm::vec2 &clickPos)

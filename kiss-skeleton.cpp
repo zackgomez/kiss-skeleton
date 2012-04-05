@@ -61,6 +61,9 @@ void Skeleton::readSkeleton(const std::string &filename)
             continue;;
         readJoint(line);
     }
+
+    // the read position is the bind position
+    setBindPose();
 }
 
 const std::vector<Joint*> Skeleton::getJoints() const
