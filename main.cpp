@@ -25,17 +25,21 @@ static const float scaleCircleRadius = 0.15f; //ndc
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 static const int NO_MESH_MODE = 0, SKINNING_MODE = 1, POSING_MODE = 2;
 
+static const glm::vec3 selColor(0.8f, 0.4f, 0.2f);
+
 // global vars
 static Skeleton *skeleton;
 static Arcball *arcball;
 static rawmesh *mesh;
-static std::map<std::string, glm::vec3> jointNDC;
+SkeletonPose *bindPose;
+SkeletonPose *editPose; // the "pose mode" current pose
+static std::vector<glm::vec3> jointNDC;
 static glm::vec3 axisDir[3]; // x,y,z axis directions
 static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
 static glm::vec3 circleNDC;  // circle ndc coordinate
 
 // UI vars
-static std::string selectedJoint;
+static const Joint *selectedJoint = NULL;
 static glm::vec2 dragStart;
 static float zoomStart; // starting zoom level of a zoom drag
 static bool rotating = false;
@@ -61,6 +65,7 @@ static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool ho
 static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
 
 static void autoSkinMesh();
+static SkeletonPose* currentPose();
 
 static void setTranslationVec(const glm::vec2 &clickPos);
 static void setRotationVec(const glm::vec2 &clickPos);
@@ -78,11 +83,12 @@ static void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &w
 static void renderCircle(const glm::mat4 &worldTransform);
 static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
-static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh);
+static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint);
 static void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh);
 static void renderFaces(const glm::mat4 &transform, vert *verts, size_t nverts,
         face* faces, size_t nfaces);
 static void renderSkinnedMesh(const glm::mat4 &transform, rawmesh *mesh);
+
 static glm::mat4 getViewMatrix();
 static glm::mat4 getProjectionMatrix();
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
@@ -121,19 +127,21 @@ void redraw(void)
         glColor3f(1.f, 1.f, 1.f);
         renderPoints(viewMatrix, mesh->verts, mesh->nverts);
 
-        glColor4f(0.8f, 0.4f, 0.2f, 0.5f);
+        glColor4fv(glm::value_ptr(glm::vec4(selColor, 0.5f)));
         renderRawMesh(viewMatrix, mesh);
 
-        if (!selectedJoint.empty())
+        if (selectedJoint)
         {
-            glColor3f(0.f, 1.f, 0.f);
-            renderSelectedPoints(viewMatrix, mesh);
+            glColor3fv(glm::value_ptr(selColor));
+            renderSelectedPoints(viewMatrix, mesh, selectedJoint->index);
         }
     }
     else if (meshMode == POSING_MODE)
     {
-        glColor4f(0.8f, 0.4f, 0.2f, 0.5f);
+        glColor3f(1,1,1);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         renderSkinnedMesh(viewMatrix, mesh);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
     glutSwapBuffers();
@@ -164,7 +172,7 @@ void mouse(int button, int state, int x, int y)
             return;
         }
         // If no joint selected, nothing to do
-        if (selectedJoint.empty()) return;
+        if (!selectedJoint) return;
 
         glm::vec2 clickPos = clickToScreenPos(x, y);
         if (clickPos == glm::vec2(HUGE_VAL))
@@ -183,18 +191,19 @@ void mouse(int button, int state, int x, int y)
     {
         if (state == GLUT_DOWN)
         {
-            selectedJoint = "";
+            selectedJoint = NULL;
             glm::vec2 screencoord = clickToScreenPos(x, y);
 
             // Find closest joint
             float nearest = HUGE_VAL;
-            for (std::map<std::string, glm::vec3>::const_iterator it = jointNDC.begin(); it != jointNDC.end(); it++)
+            for (size_t i = 0; i < jointNDC.size(); i++)
             {
-                float dist = glm::length(screencoord - glm::vec2(it->second));
-                if (dist < selectThresh && it->second.z < nearest)
+                const glm::vec3 &ndc = jointNDC[i];
+                float dist = glm::length(screencoord - glm::vec2(ndc));
+                if (dist < selectThresh && ndc.z < nearest)
                 {
-                    selectedJoint = it->first;
-                    nearest = it->second.z;
+                    selectedJoint = skeleton->getJoint(i);
+                    nearest = ndc.z;
                 }
             }
         }
@@ -239,15 +248,14 @@ void motion(int x, int y)
 {
     if (dragging)
     {
-        const Joint* joint = skeleton->getJoint(selectedJoint);
         glm::vec2 screenpos = clickToScreenPos(x, y);
 
         if (editMode == TRANSLATION_MODE)
-            setJointPosition(joint, screenpos);
+            setJointPosition(selectedJoint, screenpos);
         else if (editMode == ROTATION_MODE)
-            setJointRotation(joint, screenpos);
+            setJointRotation(selectedJoint, screenpos);
         else if (editMode == SCALE_MODE)
-            setJointScale(joint, screenpos);
+            setJointScale(selectedJoint, screenpos);
         else
             assert(false && "Unknown edit mode");
     }
@@ -287,12 +295,35 @@ void keyboard(GLubyte key, GLint x, GLint y)
     if (key == 'b')
     {
         skeleton->setBindPose();
+        freeSkeletonPose(bindPose);
+        bindPose = currentPose();
+        freeSkeletonPose(editPose);
+        editPose = currentPose();
         autoSkinMesh();
     }
     // Tab
     if (key == 9 && meshMode != NO_MESH_MODE)
     {
-        meshMode = meshMode == SKINNING_MODE ? POSING_MODE : SKINNING_MODE;
+        if (meshMode == POSING_MODE)
+        {
+            // Save the edit pose
+            freeSkeletonPose(editPose);
+            editPose = currentPose();
+
+            meshMode = SKINNING_MODE;
+            skeleton->setPose(bindPose);
+        }
+        else if (meshMode == SKINNING_MODE)
+        {
+            // restore the edit pose
+            skeleton->setPose(editPose);
+            meshMode = POSING_MODE;
+        }
+    }
+    // reset to bind pose
+    if (key == '\\')
+    {
+        skeleton->setPose(bindPose);
     }
     // Update display...
     glutPostRedisplay();
@@ -332,6 +363,10 @@ int main(int argc, char **argv)
     std::string bonefile = "stickman.bones";
     skeleton = new Skeleton();
     skeleton->readSkeleton(bonefile);
+    bindPose = currentPose();
+    editPose = currentPose();
+
+    jointNDC = std::vector<glm::vec3>(skeleton->getJoints().size());
 
     mesh = NULL;
     if (objfile)
@@ -401,14 +436,33 @@ void autoSkinMesh()
     }
 }
 
+SkeletonPose* currentPose()
+{
+    const std::vector<Joint*> joints = skeleton->getJoints();
+
+    SkeletonPose *pose = new SkeletonPose();
+    pose->poses = std::vector<JointPose*>(joints.size());
+
+    for (size_t i = 0; i < joints.size(); i++)
+    {
+        JointPose *p = new JointPose();
+        const Joint *j = joints[i];
+        p->pos = j->pos;
+        p->rot = j->rot;
+        p->scale = j->scale;
+        pose->poses[i] = p;
+    }
+
+    return pose;
+}
+
 void setTranslationVec(const glm::vec2 &clickPos)
 {
     // pixels to NDC
     const float axisDistThresh = 5.f / std::max(windowWidth, windowHeight);
     const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
-    const Joint *joint = skeleton->getJoint(selectedJoint);
 
-    glm::vec3 selJointNDC = jointNDC[selectedJoint];
+    glm::vec3 selJointNDC = jointNDC[selectedJoint->index];
 
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
 
@@ -436,24 +490,23 @@ void setTranslationVec(const glm::vec2 &clickPos)
 
     // If they choose an axis translation vector, we need to make sure that it's in the
     // correct (parent) space
-    glm::mat4 parentTransform = joint->parent == Skeleton::ROOT_PARENT ?
-        glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+    glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ?
+        glm::mat4(1.f) : skeleton->getJoint(selectedJoint->parent)->worldTransform;
     translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
 
     // If we got here, then it's a valid drag and translationVec is already set
     std::cout << "Translation drag.  vec: " << translationVec << '\n';
     dragging = true;
     dragStart = clickPos;
-    startingPos = joint->pos;
+    startingPos = selectedJoint->pos;
 }
 
 void setRotationVec(const glm::vec2 &clickPos)
 {
     const float axisDistThresh = 5.f / glm::max(windowWidth, windowHeight);
     const float arcDistThresh = 0.003f;
-    glm::vec3 selJointNDC = jointNDC[selectedJoint];
+    glm::vec3 selJointNDC = jointNDC[selectedJoint->index];
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
-    const Joint* joint = skeleton->getJoint(selectedJoint);
     const float r = axisLength;
 
     // Check if they're outside of the rendered rotation sphere
@@ -491,10 +544,10 @@ void setRotationVec(const glm::vec2 &clickPos)
 
     // Transform the rotation vector into parent space so that the transformation
     // is around the global axes
-    glm::mat4 parentTransform = joint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+    glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(selectedJoint->parent)->worldTransform;
     rotationVec = applyMatrix(glm::inverse(parentTransform), globalVec, false);
     // Save startign rotation as quat
-    startingRot = axisAngleToQuat(joint->rot);
+    startingRot = axisAngleToQuat(selectedJoint->rot);
 
     dragging = true;
     dragStart = clickPos;
@@ -507,7 +560,7 @@ void setScaleVec(const glm::vec2 &clickPos)
     // pixels to NDC
     const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
 
-    glm::vec3 selJointNDC = jointNDC[selectedJoint];
+    glm::vec3 selJointNDC = jointNDC[selectedJoint->index];
 
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
 
@@ -517,7 +570,7 @@ void setScaleVec(const glm::vec2 &clickPos)
         return;
     dragging = true;
     dragStart = clickPos;
-    startingScale = skeleton->getJoint(selectedJoint)->scale;
+    startingScale = selectedJoint->scale;
     std::cout << "Scale drag.\n";
 }
 
@@ -544,9 +597,9 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 
     // Get the positions of the two mouse positions in parent joint space
     glm::vec3 startParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
-            glm::vec3(dragStart, jointNDC[selectedJoint].z));
+            glm::vec3(dragStart, jointNDC[selectedJoint->index].z));
     glm::vec3 mouseParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
-            glm::vec3(dragPos, jointNDC[selectedJoint].z));
+            glm::vec3(dragPos, jointNDC[selectedJoint->index].z));
 
     // project on translation vector if necessary
     if (translationVec != glm::vec3(0.f))
@@ -563,15 +616,15 @@ void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
     pose.rot = joint->rot;
     pose.scale = joint->scale;
     pose.pos = startingPos + deltaPos;
-    skeleton->setPose(selectedJoint, &pose);
+    skeleton->setPose(selectedJoint->index, &pose);
 }
 
 void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 {
-    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint].z);
+    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint->index].z);
     if (dragPos == glm::vec2(HUGE_VAL))
         return;
-    glm::vec2 center(jointNDC[selectedJoint]);
+    glm::vec2 center(jointNDC[selectedJoint->index]);
 
     glm::vec2 starting = glm::normalize(dragStart - center);
     glm::vec2 current  = glm::normalize(dragPos - center);
@@ -587,18 +640,18 @@ void setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
     newpose.scale = joint->scale;
     newpose.rot = quatToAxisAngle(newrot);
 
-    skeleton->setPose(selectedJoint, &newpose);
+    skeleton->setPose(selectedJoint->index, &newpose);
 }
 
 void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 {
-    glm::vec2 boneNDC(jointNDC[selectedJoint]);
+    glm::vec2 boneNDC(jointNDC[selectedJoint->index]);
     float newScale = glm::length(dragPos - boneNDC) / scaleCircleRadius;
     JointPose pose;
     pose.rot = joint->rot;
     pose.pos = joint->pos;
     pose.scale = newScale;
-    skeleton->setPose(selectedJoint, &pose);
+    skeleton->setPose(selectedJoint->index, &pose);
 }
 
 static GLfloat cube_verts[] = {
@@ -625,24 +678,24 @@ void renderJoint(const glm::mat4 &transform, const Joint* joint,
     // Draw cube
     glLoadMatrixf(glm::value_ptr(glm::scale(transform * joint->worldTransform,
                     glm::vec3(0.08f))));
-    if (joint->name == selectedJoint)
-        glColor3f(0.9f, 0.5f, 0.5f);
+    if (joint == selectedJoint)
+        glColor3fv(glm::value_ptr(selColor));
     else
         glColor3f(1, 1, 1);
     renderCube();
 
     // Render axis (x,y,z lines) if necessary
-    if (editMode == TRANSLATION_MODE && joint->name == selectedJoint)
+    if (editMode == TRANSLATION_MODE && joint == selectedJoint)
     {
         glm::vec3 axisCenter = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
         renderAxes(transform, axisCenter);
     }
-    else if (editMode == ROTATION_MODE && joint->name == selectedJoint)
+    else if (editMode == ROTATION_MODE && joint == selectedJoint)
     {
         glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
         renderRotationSphere(transform, pos);
     }
-    else if (editMode == SCALE_MODE && joint->name == selectedJoint)
+    else if (editMode == SCALE_MODE && joint == selectedJoint)
     {
         glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
         renderScaleCircle(transform * joint->scale, pos);
@@ -653,7 +706,7 @@ void renderJoint(const glm::mat4 &transform, const Joint* joint,
     glm::vec4 jointndc(0,0,0,1);
     jointndc = fullTransform * jointndc;
     jointndc /= jointndc.w;
-    jointNDC[joint->name] = glm::vec3(jointndc);
+    jointNDC[joint->index] = glm::vec3(jointndc);
 
     // No "bone" to draw for root
     if (joint->parent == 255)
@@ -867,10 +920,9 @@ void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)
     glPointSize(1);
 }
 
-void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh)
+void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint)
 {
     glLoadMatrixf(glm::value_ptr(transform));
-    const Joint *joint = skeleton->getJoint(selectedJoint);
     const size_t nverts = mesh->nverts;
     const vert* verts = mesh->verts;
     const int* weights = mesh->joints;
@@ -878,12 +930,8 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh)
     glPointSize(5);
     glBegin(GL_POINTS);
     for (size_t i = 0; i < nverts; i++)
-    {
-        if (weights[i] == joint->index)
-        {
+        if (weights[i] == joint)
             glVertex4fv(verts[i].pos);
-        }
-    }
     glEnd();
     glPointSize(1);
 }

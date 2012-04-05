@@ -83,24 +83,32 @@ const Joint* Skeleton::getJoint(unsigned index) const
     return joints_[index];
 }
 
-void Skeleton::setPose(const std::string &name, const JointPose *pose)
+void Skeleton::setPose(unsigned index, const JointPose *pose)
 {
-    size_t i;
     // first find the joint and update it
-    for (i = 0; i < joints_.size(); i++)
-    {
-        if (joints_[i]->name == name)
-        {
-            joints_[i]->rot = pose->rot;
-            joints_[i]->pos = pose->pos;
-            joints_[i]->scale = pose->scale;
-            break;
-        }
-    }
+    joints_[index]->rot = pose->rot;
+    joints_[index]->pos = pose->pos;
+    joints_[index]->scale = pose->scale;
     // Then update the global transforms for it and all joints that might
     // depend on it
-    for (; i < joints_.size(); i++)
+    for (size_t i = index; i < joints_.size(); i++)
         setWorldTransform(joints_[i]);
+}
+
+void Skeleton::setPose(const SkeletonPose *sp)
+{
+    assert(sp->poses.size() == joints_.size());
+
+    for (size_t i = 0; i < joints_.size(); i++)
+    {
+        Joint *j = joints_[i];
+        const JointPose *p = sp->poses[i];
+
+        j->pos = p->pos;
+        j->rot = p->rot;
+        j->scale = p->scale;
+        setWorldTransform(j);
+    }
 }
 
 void Skeleton::setBindPose()
@@ -131,5 +139,11 @@ void Skeleton::setWorldTransform(Joint *joint)
     transform = glm::scale(transform, glm::vec3(joint->scale));
 
     joint->worldTransform = transform;
+}
+
+void freeSkeletonPose(SkeletonPose *sp)
+{
+    for (size_t i = 0; i < sp->poses.size(); i++)
+        delete sp->poses[i];
 }
 

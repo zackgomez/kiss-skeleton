@@ -42,9 +42,10 @@ public:
     const std::vector<Joint*> getJoints() const;
     const Joint* getJoint(const std::string &name) const;
     const Joint* getJoint(unsigned index) const;
-    void setPose(const std::string& name, const JointPose *pose);
+    void setPose(unsigned index, const JointPose *pose);
+    void setPose(const SkeletonPose *sp);
 
-    // Sets the current pose as the bind pos
+    // Sets the current pose as the bind pose
     void setBindPose();
 
     // The parent index of the root bone
@@ -57,3 +58,5 @@ private:
     void readJoint(const std::string &jointstr);
 };
 
+
+void freeSkeletonPose(SkeletonPose *sp);
