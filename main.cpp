@@ -31,7 +31,7 @@ static const glm::vec3 selColor(0.8f, 0.4f, 0.2f);
 static Skeleton *skeleton;
 static Arcball *arcball;
 static rawmesh *mesh;
-static const char *meshfile;
+static const char *skelfile, *meshfile;
 SkeletonPose *bindPose;
 SkeletonPose *editPose; // the "pose mode" current pose
 static std::vector<glm::vec3> jointNDC;
@@ -338,12 +338,15 @@ void keyboard(GLubyte key, GLint x, GLint y)
 
 int main(int argc, char **argv)
 {
-    char *objfile = NULL;
     if (argc < 2)
     {
         printf("usage: %s: BONESFILE [OBJFILE]\n");
         exit(1);
     }
+    skelfile = argv[1];
+    meshfile = NULL;
+    if (argc >= 3)
+        meshfile = argv[2];
 
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
@@ -370,20 +373,18 @@ int main(int argc, char **argv)
 
     arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 
-    std::string bonefile = "stickman.bones";
     skeleton = new Skeleton();
-    skeleton->readSkeleton(bonefile);
+    skeleton->readSkeleton(skelfile);
     bindPose = currentPose();
     editPose = currentPose();
 
     jointNDC = std::vector<glm::vec3>(skeleton->getJoints().size());
 
     mesh = NULL;
-    if (objfile)
+    if (meshfile)
     {
-        mesh = loadRawMesh(objfile);
+        mesh = loadRawMesh(meshfile);
         meshMode = SKINNING_MODE;
-        meshfile = objfile;
     }
 
     // --------------------
