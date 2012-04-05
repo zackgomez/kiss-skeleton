@@ -16,7 +16,7 @@ rawmesh* loadRawMesh(const char *filename)
     }
 
     // First count the number of vertices and faces
-    int nverts = 0, nfaces = 0;
+    unsigned nverts = 0, nfaces = 0, nnorms = 0, ncoords = 0;
     // lines should never be longer than 1024 in a .obj...
     char buf[1024];
 
@@ -27,14 +27,24 @@ rawmesh* loadRawMesh(const char *filename)
             nverts++;
         if (strcmp(cmd, "f") == 0)
             nfaces++;
+        if (strcmp(cmd, "vn") == 0)
+            nnorms++;
+        if (strcmp(cmd, "vt") == 0)
+            ncoords++;
     }
+
+    printf("verts: %d, faces: %d, norms: %d, coords: %d\n",
+            nverts, nfaces, nnorms, ncoords);
 
     // Allocate space
     vert *verts = (vert*) malloc(sizeof(vert) * nverts);
     int  *joints = (int*) malloc(sizeof(int)  * nverts);
     face *faces = (face*) malloc(sizeof(face) * nfaces);
+    glm::vec2 *coords = (glm::vec2*) malloc(sizeof(glm::vec2) * ncoords);
+    glm::vec3 *norms = (glm::vec3*) malloc(sizeof(glm::vec3) * ncoords);
+
     // XXX replace this will some real checks
-    assert(faces && verts);
+    assert(faces && verts && joints && norms && coords);
 
     // reset to beginning of file
     fseek(f,  0, SEEK_SET);
@@ -55,11 +65,11 @@ rawmesh* loadRawMesh(const char *filename)
 
             // GEOSMASH EXTENSION for skinning
             const char *jointstr = strtok(NULL, " ");
+            //printf("jointstr: %s\n", jointstr);
             if (jointstr)
-                joints[i] = atoi(joinstr);
+                joints[verti] = atoi(jointstr);
             else
-                joints[i] = 0;
-            printf("jointstr: %s\n", jointstr);
+                joints[verti] = 0;
 
             ++verti;
         }
@@ -86,14 +96,19 @@ rawmesh* loadRawMesh(const char *filename)
     rmesh->verts  = verts;
     rmesh->joints = joints;
     rmesh->faces  = faces;
+    rmesh->norms  = norms;
+    rmesh->coords = coords;
     rmesh->nverts = nverts;
     rmesh->nfaces = nfaces;
+    rmesh->nnorms = nnorms;
+    rmesh->ncoords= ncoords;
 
     return rmesh;
 }
 
 int parseFaceVert(const char *vdef)
 {
+    // TODO update this function to support texcoords and normals
     assert(vdef);
     char buf[1024];
     strncpy(buf, vdef, sizeof(buf));
@@ -113,5 +128,44 @@ void freeRawMesh(rawmesh *rmesh)
 
     free(rmesh->verts);
     free(rmesh->faces);
+    free(rmesh->norms);
+    free(rmesh->coords);
     free(rmesh);
+}
+
+void writeRawMesh(rawmesh *rmesh, const char *filename)
+{
+    FILE *f = fopen(filename, "w");
+    if (!f)
+    {
+        fprintf(stderr, "Unable to open %s for writing.\n", filename);
+        return;
+    }
+
+    // Write a comment saying kiss-skeleton did it
+    fprintf(f, "# kiss-skeleton v0.00 OBJ File: '%s'\n", filename);
+
+    // verts
+    const vert* verts = rmesh->verts;
+    const int* joints = rmesh->joints;
+    for (size_t i = 0; i < rmesh->nverts; i++)
+        fprintf(f, "v %f %f %f %d\n",
+                verts[i].pos[0], verts[i].pos[1], verts[i].pos[2], joints[i]);
+    // coords
+    const glm::vec2 *coords = rmesh->coords;
+    for (size_t i = 0; i < rmesh->ncoords; i++)
+        fprintf(f, "vt %f %f\n",
+                coords[i][0], coords[i][1]);
+    // norms
+    const glm::vec3 *norms = rmesh->norms;
+    for (size_t i = 0; i < rmesh->ncoords; i++)
+        fprintf(f, "vn %f %f %f\n",
+                norms[i][0], norms[i][1], norms[i][2]);
+    // faces
+    const face *faces = rmesh->faces;
+    for (size_t i = 0; i < rmesh->ncoords; i++)
+        fprintf(f, "f %d// %d// %d//\n",
+               faces[i].verts[0], faces[i].verts[1], faces[i].verts[2]);
+
+    fclose(f);
 }

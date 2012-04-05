@@ -31,6 +31,7 @@ static const glm::vec3 selColor(0.8f, 0.4f, 0.2f);
 static Skeleton *skeleton;
 static Arcball *arcball;
 static rawmesh *mesh;
+static const char *meshfile;
 SkeletonPose *bindPose;
 SkeletonPose *editPose; // the "pose mode" current pose
 static std::vector<glm::vec3> jointNDC;
@@ -325,6 +326,10 @@ void keyboard(GLubyte key, GLint x, GLint y)
     {
         skeleton->setPose(bindPose);
     }
+    if (key == 'x')
+    {
+        writeRawMesh(mesh, "mesh.out.obj");
+    }
     // Update display...
     glutPostRedisplay();
 }
@@ -373,6 +378,7 @@ int main(int argc, char **argv)
     {
         mesh = loadRawMesh(objfile);
         meshMode = SKINNING_MODE;
+        meshfile = objfile;
     }
 
     // --------------------
