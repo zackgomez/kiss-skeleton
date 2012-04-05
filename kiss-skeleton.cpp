@@ -42,6 +42,7 @@ void Skeleton::readJoint(const std::string &bonestr)
     newbone->scale = scale;
     newbone->pos = glm::vec3(x, y, z);
     newbone->rot = glm::vec4(rotx, roty, rotz, a);
+    newbone->index  = joints_.size();
     newbone->parent = parent;
 
     setWorldTransform(newbone);

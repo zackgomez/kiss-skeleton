@@ -76,6 +76,7 @@ static void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &w
 static void renderCircle(const glm::mat4 &worldTransform);
 static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
+static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh);
 static void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh);
 static glm::mat4 getViewMatrix();
 static glm::mat4 getProjectionMatrix();
@@ -117,6 +118,12 @@ void redraw(void)
         glColor4f(0.8f, 0.4f, 0.2f, 0.5f);
         renderRawMesh(viewMatrix, mesh);
         glDisable(GL_BLEND);
+
+        if (!selectedJoint.empty())
+        {
+            glColor3f(0.f, 1.f, 0.f);
+            renderSelectedPoints(viewMatrix, mesh);
+        }
     }
 
     glutSwapBuffers();
@@ -344,7 +351,36 @@ glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
 
 void autoSkinMesh()
 {
-    // TODO
+    assert(mesh);
+
+    const std::vector<Joint*> joints = skeleton->getJoints();
+    // First get all the joint world positions for easy access
+    std::vector<glm::vec3> jointPos(joints.size());
+    for (size_t i = 0; i < joints.size(); i++)
+        jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
+
+    // For each vertex, find the closes joint and bind to it
+    // This is the naive version that is O(n^2), improve if necessary
+    vert* verts = mesh->verts;
+    int*  weights = mesh->joints;
+    for (size_t i = 0; i < mesh->nverts; i++)
+    {
+        float best = HUGE_VAL;
+        int cur = -1;
+
+        for (size_t j = 0; j < jointPos.size(); j++)
+        {
+            glm::vec3 v = glm::make_vec3(verts[i].pos);
+            float dist = glm::length(jointPos[j] - v);
+            if (dist < best)
+            {
+                best = dist;
+                cur = j;
+            }
+        }
+
+        weights[i] = cur;
+    }
 }
 
 void setTranslationVec(const glm::vec2 &clickPos)
@@ -804,11 +840,13 @@ void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)
 {
     glLoadMatrixf(glm::value_ptr(transform));
 
+    glPointSize(2);
     glEnableClientState(GL_VERTEX_ARRAY);
     glVertexPointer(4, GL_FLOAT, sizeof(vert), verts + offsetof(vert, pos));
 
     glDrawArrays(GL_POINTS, 0, nverts);
     glDisableClientState(GL_VERTEX_ARRAY);
+    glPointSize(1);
 }
 
 void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
@@ -818,6 +856,27 @@ void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
     glVertexPointer(4, GL_FLOAT, sizeof(vert), mesh->verts + offsetof(vert, pos));
     glDrawElements(GL_TRIANGLES, 3*mesh->nfaces, GL_UNSIGNED_INT, mesh->faces);
     glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh)
+{
+    glLoadMatrixf(glm::value_ptr(transform));
+    const Joint *joint = skeleton->getJoint(selectedJoint);
+    const size_t nverts = mesh->nverts;
+    const vert* verts = mesh->verts;
+    const int* weights = mesh->joints;
+
+    glPointSize(5);
+    glBegin(GL_POINTS);
+    for (size_t i = 0; i < nverts; i++)
+    {
+        if (weights[i] == joint->index)
+        {
+            glVertex4fv(verts[i].pos);
+        }
+    }
+    glEnd();
+    glPointSize(1);
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)

@@ -12,6 +12,7 @@ struct Joint
 
     std::string name;
     
+    unsigned index;
     unsigned parent;
 
     glm::mat4 worldTransform;
