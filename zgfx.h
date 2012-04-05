@@ -18,6 +18,7 @@ struct face
 struct rawmesh
 {
     vert *verts;
+    int  *joints; // the joint vertices are bound to
     size_t nverts;
 
     face *faces;

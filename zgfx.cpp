@@ -31,6 +31,7 @@ rawmesh* loadRawMesh(const char *filename)
 
     // Allocate space
     vert *verts = (vert*) malloc(sizeof(vert) * nverts);
+    int  *joints = (int*) malloc(sizeof(int)  * nverts);
     face *faces = (face*) malloc(sizeof(face) * nfaces);
     // XXX replace this will some real checks
     assert(faces && verts);
@@ -73,8 +74,9 @@ rawmesh* loadRawMesh(const char *filename)
     rawmesh *rmesh = (rawmesh*) malloc(sizeof(rawmesh));
     // XXX again better error checking
     assert(rmesh);
-    rmesh->verts = verts;
-    rmesh->faces = faces;
+    rmesh->verts  = verts;
+    rmesh->joints = joints;
+    rmesh->faces  = faces;
     rmesh->nverts = nverts;
     rmesh->nfaces = nfaces;
 

@@ -102,6 +102,12 @@ void Skeleton::setPose(const std::string &name, const JointPose *pose)
         setWorldTransform(joints_[i]);
 }
 
+void Skeleton::setBindPose()
+{
+    for (size_t i = 0; i < joints_.size(); i++)
+        joints_[i]->inverseBindTransform = glm::inverse(joints_[i]->worldTransform);
+}
+
 void Skeleton::setWorldTransform(Joint *joint)
 {
     // Set transform as pa

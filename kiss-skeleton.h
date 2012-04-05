@@ -15,6 +15,7 @@ struct Joint
     unsigned parent;
 
     glm::mat4 worldTransform;
+    glm::mat4 inverseBindTransform;
 };
 
 struct JointPose
@@ -41,6 +42,9 @@ public:
     const Joint* getJoint(const std::string &name) const;
     const Joint* getJoint(unsigned index) const;
     void setPose(const std::string& name, const JointPose *pose);
+
+    // Sets the current pose as the bind pos
+    void setBindPose();
 
     // The parent index of the root bone
     static const unsigned ROOT_PARENT;

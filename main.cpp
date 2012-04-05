@@ -17,6 +17,7 @@
 // constants
 static int windowWidth = 800, windowHeight = 600;
 static const float arcballRadius = 10.f;
+static const float zoomSpeed = 2.f;
 static const float selectThresh = 0.02f;
 static const float axisLength = 0.10f; // ndc
 static const float circleRadius = 0.12f; //ndc
@@ -35,6 +36,7 @@ static glm::vec3 circleNDC;  // circle ndc coordinate
 // UI vars
 static std::string selectedJoint;
 static glm::vec2 dragStart;
+static float zoomStart; // starting zoom level of a zoom drag
 static bool rotating = false;
 static bool dragging = false;
 static bool zooming  = false;
@@ -52,12 +54,15 @@ static float startingScale = 1.f;
 // Functions
 static glm::vec2 clickToScreenPos(int x, int y);
 static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homogenous = true);
-static void setTranslationVec(const glm::vec2 &clickPos);
-static void setRotationVec(const glm::vec2 &clickPos);
-static void setScaleVec(const glm::vec2 &clickPos);
 // p1 and p2 determine the line, pt is the point to get distance for
 // if the point is not between the line segment, then HUGE_VAL is returned
 static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
+
+static void autoSkinMesh();
+
+static void setTranslationVec(const glm::vec2 &clickPos);
+static void setRotationVec(const glm::vec2 &clickPos);
+static void setScaleVec(const glm::vec2 &clickPos);
 
 static void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
 static void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
@@ -182,11 +187,19 @@ void mouse(int button, int state, int x, int y)
     {
         if (state == GLUT_DOWN)
         {
-            if (glutGetModifiers(GLUT_
-            glm::vec2 screenPos = clickToScreenPos(x, y);
-            glm::vec3 ndc(screenPos, 0.f);
-            arcball->start(ndc);
-            rotating = true;
+            if (glutGetModifiers() & GLUT_ACTIVE_CTRL)
+            {
+                dragStart = clickToScreenPos(x, y);
+                zoomStart = arcball->getZoom();
+                zooming = true;
+            }
+            else
+            {
+                glm::vec2 screenPos = clickToScreenPos(x, y);
+                glm::vec3 ndc(screenPos, 0.f);
+                arcball->start(ndc);
+                rotating = true;
+            }
         }
         else
         {
@@ -227,6 +240,18 @@ void motion(int x, int y)
         if (ndc != glm::vec3(HUGE_VAL, HUGE_VAL, 0.f))
             arcball->move(ndc);
     }
+    else if (zooming)
+    {
+        glm::vec2 delta = clickToScreenPos(x, y) - dragStart;
+        
+        // only the y coordinate of the drag matters
+        float fact = delta.y;
+
+        float newZoom = zoomStart * powf(zoomSpeed, fact);
+        arcball->setZoom(newZoom);
+
+        std::cout << "fact: " << fact << " newZoom: " << newZoom << '\n';
+    }
 
     glutPostRedisplay();
 }
@@ -242,6 +267,11 @@ void keyboard(GLubyte key, GLint x, GLint y)
         editMode = ROTATION_MODE;
     if (key == 's')
         editMode = SCALE_MODE;
+    if (key == 'b')
+    {
+        skeleton->setBindPose();
+        autoSkinMesh();
+    }
     // Update display...
     glutPostRedisplay();
 }
@@ -310,6 +340,11 @@ glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
     pt = mat * pt;
     if (homo) pt /= pt.w;
     return glm::vec3(pt);
+}
+
+void autoSkinMesh()
+{
+    // TODO
 }
 
 void setTranslationVec(const glm::vec2 &clickPos)
@@ -778,7 +813,6 @@ void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)
 
 void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
 {
-    glDisable(GL_CULL_FACE);
     glLoadMatrixf(glm::value_ptr(transform));
     glEnableClientState(GL_VERTEX_ARRAY);
     glVertexPointer(4, GL_FLOAT, sizeof(vert), mesh->verts + offsetof(vert, pos));
