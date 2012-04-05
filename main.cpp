@@ -326,7 +326,7 @@ void keyboard(GLubyte key, GLint x, GLint y)
     {
         skeleton->setPose(bindPose);
     }
-    if (key == 'x')
+    if (key == 'x' && mesh)
     {
         writeRawMesh(mesh, "mesh.out.obj");
     }

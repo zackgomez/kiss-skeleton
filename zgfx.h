@@ -12,8 +12,12 @@ struct vert
 struct face
 {
     int verts[3];
-    //int coords[3];
-    //int norms[3];
+};
+
+struct facevert { int v, vt, vn; };
+struct fullface
+{
+    facevert fverts[3];
 };
 
 struct rawmesh
@@ -22,7 +26,9 @@ struct rawmesh
     int  *joints; // the joint vertices are bound to
     size_t nverts;
 
+    // just for render convenience, full face is more useful in general
     face *faces;
+    fullface *ffaces;
     size_t nfaces;
 
     glm::vec2 *coords;

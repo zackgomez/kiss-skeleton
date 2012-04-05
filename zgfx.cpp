@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <cstring>
 
-static int parseFaceVert(const char *vdef);
+static facevert parseFaceVert(const char *vdef);
 
 rawmesh* loadRawMesh(const char *filename)
 {
@@ -40,8 +40,9 @@ rawmesh* loadRawMesh(const char *filename)
     vert *verts = (vert*) malloc(sizeof(vert) * nverts);
     int  *joints = (int*) malloc(sizeof(int)  * nverts);
     face *faces = (face*) malloc(sizeof(face) * nfaces);
+    fullface *ffaces = (fullface*) malloc(sizeof(fullface) * nfaces);
     glm::vec2 *coords = (glm::vec2*) malloc(sizeof(glm::vec2) * ncoords);
-    glm::vec3 *norms = (glm::vec3*) malloc(sizeof(glm::vec3) * ncoords);
+    glm::vec3 *norms = (glm::vec3*) malloc(sizeof(glm::vec3) * nnorms);
 
     // XXX replace this will some real checks
     assert(faces && verts && joints && norms && coords);
@@ -76,24 +77,29 @@ rawmesh* loadRawMesh(const char *filename)
         else if (strcmp(cmd, "f") == 0)
         {
             // This assumes the faces are triangles
-            faces[facei].verts[0] = parseFaceVert(strtok(NULL, " "));
-            faces[facei].verts[1] = parseFaceVert(strtok(NULL, " "));
-            faces[facei].verts[2] = parseFaceVert(strtok(NULL, " "));
-            //printf("face: %d %d %d\n", faces[facei].verts[0],
-                    //faces[facei].verts[1], faces[facei].verts[2]);
+            ffaces[facei].fverts[0] = parseFaceVert(strtok(NULL, " "));
+            ffaces[facei].fverts[1] = parseFaceVert(strtok(NULL, " "));
+            ffaces[facei].fverts[2] = parseFaceVert(strtok(NULL, " "));
+
+            // This is just for rendering convenience...
+            faces[facei].verts[0] = ffaces[facei].fverts[0].v;
+            faces[facei].verts[1] = ffaces[facei].fverts[1].v;
+            faces[facei].verts[2] = ffaces[facei].fverts[2].v;
             ++facei;
         }
         else if (strcmp(cmd, "vn") == 0)
         {
-            //norms[normi][0] = atof(strtok(NULL, " "));
-            //norms[normi][1] = atof(strtok(NULL, " "));
-            //norms[normi][2] = atof(strtok(NULL, " "));
+            norms[normi][0] = atof(strtok(NULL, " "));
+            norms[normi][1] = atof(strtok(NULL, " "));
+            norms[normi][2] = atof(strtok(NULL, " "));
+            printf("norm: %f %f %f\n", norms[normi][0],
+                    norms[normi][1], norms[normi][2]);
             ++normi;
         }
         else if (strcmp(cmd, "vt") == 0)
         {
-            //coords[coordi][0] = atof(strtok(NULL, " "));
-            //coords[coordi][1] = atof(strtok(NULL, " "));
+            coords[coordi][0] = atof(strtok(NULL, " "));
+            coords[coordi][1] = atof(strtok(NULL, " "));
             ++coordi;
         }
     }
@@ -111,6 +117,7 @@ rawmesh* loadRawMesh(const char *filename)
     rmesh->verts  = verts;
     rmesh->joints = joints;
     rmesh->faces  = faces;
+    rmesh->ffaces = ffaces;
     rmesh->norms  = norms;
     rmesh->coords = coords;
     rmesh->nverts = nverts;
@@ -121,7 +128,7 @@ rawmesh* loadRawMesh(const char *filename)
     return rmesh;
 }
 
-int parseFaceVert(const char *vdef)
+facevert parseFaceVert(const char *vdef)
 {
     // TODO update this function to support texcoords and normals
     assert(vdef);
@@ -129,12 +136,13 @@ int parseFaceVert(const char *vdef)
     strncpy(buf, vdef, sizeof(buf));
     char *saveptr;
 
-    int v = atoi(strtok_r(buf, "/", &saveptr));
-    int vn = atoi(strtok_r(buf, "/", &saveptr));
-    int vt = atoi(strtok_r(buf, "/", &saveptr));
-
     // 1 indexed to 0 indexed
-    return v - 1;
+    int v = atoi(strtok_r(buf, "/", &saveptr)) - 1;
+    int vn = atoi(strtok_r(NULL, "/", &saveptr)) - 1;
+    int vt = atoi(strtok_r(NULL, "/", &saveptr)) - 1;
+
+    facevert fv; fv.v = v; fv.vn = vn; fv.vt = vt;
+    return fv;
 }
 
 void freeRawMesh(rawmesh *rmesh)
@@ -173,14 +181,17 @@ void writeRawMesh(rawmesh *rmesh, const char *filename)
                 coords[i][0], coords[i][1]);
     // norms
     const glm::vec3 *norms = rmesh->norms;
-    for (size_t i = 0; i < rmesh->ncoords; i++)
+    for (size_t i = 0; i < rmesh->nnorms; i++)
         fprintf(f, "vn %f %f %f\n",
                 norms[i][0], norms[i][1], norms[i][2]);
     // faces
-    const face *faces = rmesh->faces;
-    for (size_t i = 0; i < rmesh->ncoords; i++)
-        fprintf(f, "f %d// %d// %d//\n",
-               faces[i].verts[0], faces[i].verts[1], faces[i].verts[2]);
+    // be sure to convert from 0 based to 1 based indexing
+    const fullface *ffaces = rmesh->ffaces;
+    for (size_t i = 0; i < rmesh->nfaces; i++)
+        fprintf(f, "f %d/%d/%d %d/%d/%d %d/%d/%d\n",
+               ffaces[i].fverts[0].v+1, ffaces[i].fverts[0].vn+1, ffaces[i].fverts[0].vt+1,
+               ffaces[i].fverts[1].v+1, ffaces[i].fverts[1].vn+1, ffaces[i].fverts[1].vt+1,
+               ffaces[i].fverts[2].v+1, ffaces[i].fverts[2].vn+1, ffaces[i].fverts[2].vt+1);
 
     fclose(f);
 }
