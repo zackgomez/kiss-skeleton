@@ -66,6 +66,10 @@ rawmesh* loadRawMesh(const char *filename)
         }
     }
 
+    // XXX this just binds all the verts to the root joint
+    for (size_t i = 0; i < nverts; i++)
+        joints[i] = 0;
+
     assert(verti == nverts);
     assert(facei == nfaces);
     // Done with file

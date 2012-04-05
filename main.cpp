@@ -23,6 +23,7 @@ static const float axisLength = 0.10f; // ndc
 static const float circleRadius = 0.12f; //ndc
 static const float scaleCircleRadius = 0.15f; //ndc
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
+static const int NO_MESH_MODE = 0, SKINNING_MODE = 1, POSING_MODE = 2;
 
 // global vars
 static Skeleton *skeleton;
@@ -40,6 +41,7 @@ static float zoomStart; // starting zoom level of a zoom drag
 static bool rotating = false;
 static bool dragging = false;
 static bool zooming  = false;
+static int meshMode = NO_MESH_MODE;
 static int editMode = TRANSLATION_MODE;
 
 // translation mode variables
@@ -78,6 +80,9 @@ static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
 static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh);
 static void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh);
+static void renderFaces(const glm::mat4 &transform, vert *verts, size_t nverts,
+        face* faces, size_t nfaces);
+static void renderSkinnedMesh(const glm::mat4 &transform, rawmesh *mesh);
 static glm::mat4 getViewMatrix();
 static glm::mat4 getProjectionMatrix();
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
@@ -102,28 +107,33 @@ void redraw(void)
     glm::mat4 viewMatrix = arcball->getViewMatrix();
     glLoadMatrixf(glm::value_ptr(viewMatrix));
 
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     // Render the joints
     const std::vector<Joint*> joints = skeleton->getJoints();
     for (size_t i = 0; i < joints.size(); i++)
         renderJoint(viewMatrix, joints[i], joints);
 
     // And the mesh
-    if (mesh)
+    if (meshMode == SKINNING_MODE)
     {
         glColor3f(1.f, 1.f, 1.f);
         renderPoints(viewMatrix, mesh->verts, mesh->nverts);
 
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glColor4f(0.8f, 0.4f, 0.2f, 0.5f);
         renderRawMesh(viewMatrix, mesh);
-        glDisable(GL_BLEND);
 
         if (!selectedJoint.empty())
         {
             glColor3f(0.f, 1.f, 0.f);
             renderSelectedPoints(viewMatrix, mesh);
         }
+    }
+    else if (meshMode == POSING_MODE)
+    {
+        glColor4f(0.8f, 0.4f, 0.2f, 0.5f);
+        renderSkinnedMesh(viewMatrix, mesh);
     }
 
     glutSwapBuffers();
@@ -279,6 +289,11 @@ void keyboard(GLubyte key, GLint x, GLint y)
         skeleton->setBindPose();
         autoSkinMesh();
     }
+    // Tab
+    if (key == 9 && meshMode != NO_MESH_MODE)
+    {
+        meshMode = meshMode == SKINNING_MODE ? POSING_MODE : SKINNING_MODE;
+    }
     // Update display...
     glutPostRedisplay();
 }
@@ -320,7 +335,10 @@ int main(int argc, char **argv)
 
     mesh = NULL;
     if (objfile)
+    {
         mesh = loadRawMesh(objfile);
+        meshMode = SKINNING_MODE;
+    }
 
     // --------------------
     // END MY SETUP
@@ -849,15 +867,6 @@ void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)
     glPointSize(1);
 }
 
-void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
-{
-    glLoadMatrixf(glm::value_ptr(transform));
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glVertexPointer(4, GL_FLOAT, sizeof(vert), mesh->verts + offsetof(vert, pos));
-    glDrawElements(GL_TRIANGLES, 3*mesh->nfaces, GL_UNSIGNED_INT, mesh->faces);
-    glDisableClientState(GL_VERTEX_ARRAY);
-}
-
 void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh)
 {
     glLoadMatrixf(glm::value_ptr(transform));
@@ -877,6 +886,50 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh)
     }
     glEnd();
     glPointSize(1);
+}
+
+void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
+{
+    renderFaces(transform, mesh->verts, mesh->nverts,
+            mesh->faces, mesh->nfaces);
+}
+
+void renderFaces(const glm::mat4 &transform, vert *verts, size_t nverts,
+    face *faces, size_t nfaces)
+{
+    glLoadMatrixf(glm::value_ptr(transform));
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(4, GL_FLOAT, sizeof(vert), verts + offsetof(vert, pos));
+    glDrawElements(GL_TRIANGLES, 3*nfaces, GL_UNSIGNED_INT, faces);
+    glDisableClientState(GL_VERTEX_ARRAY);
+}
+
+void renderSkinnedMesh(const glm::mat4 &transform, rawmesh *mesh)
+{
+    const std::vector<Joint*> joints = skeleton->getJoints();
+    // First get a list of the necessary transformations
+    std::vector<glm::mat4> jointMats(joints.size());
+    for (size_t i = 0; i < joints.size(); i++)
+        jointMats[i] = joints[i]->worldTransform * joints[i]->inverseBindTransform;
+
+    vert *skinned = (vert *) malloc(mesh->nverts * sizeof(vert));
+    for (size_t i = 0; i < mesh->nverts; i++)
+    {
+        assert(mesh->joints[i] >= 0 && mesh->joints[i] < jointMats.size());
+        const glm::mat4 &vmat = jointMats[mesh->joints[i]];
+        glm::vec4 sv = vmat * glm::make_vec4(mesh->verts[i].pos);
+        sv /= sv.w;
+        skinned[i].pos[0] = sv.x;
+        skinned[i].pos[1] = sv.y;
+        skinned[i].pos[2] = sv.z;
+        skinned[i].pos[3] = sv.w;
+    }
+
+    //renderPoints(transform, skinned, mesh->nverts);
+    renderFaces(transform, skinned, mesh->nverts,
+            mesh->faces, mesh->nfaces);
+
+    free(skinned);
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
