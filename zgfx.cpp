@@ -49,7 +49,7 @@ rawmesh* loadRawMesh(const char *filename)
     // reset to beginning of file
     fseek(f,  0, SEEK_SET);
 
-    int verti = 0, facei = 0;
+    int verti = 0, facei = 0, normi = 0, coordi = 0;
     // Read each line and act on it as necessary
     while (fgets(buf, sizeof(buf), f))
     {
@@ -83,10 +83,25 @@ rawmesh* loadRawMesh(const char *filename)
                     //faces[facei].verts[1], faces[facei].verts[2]);
             ++facei;
         }
+        else if (strcmp(cmd, "vn") == 0)
+        {
+            //norms[normi][0] = atof(strtok(NULL, " "));
+            //norms[normi][1] = atof(strtok(NULL, " "));
+            //norms[normi][2] = atof(strtok(NULL, " "));
+            ++normi;
+        }
+        else if (strcmp(cmd, "vt") == 0)
+        {
+            //coords[coordi][0] = atof(strtok(NULL, " "));
+            //coords[coordi][1] = atof(strtok(NULL, " "));
+            ++coordi;
+        }
     }
 
     assert(verti == nverts);
     assert(facei == nfaces);
+    assert(normi == nnorms);
+    assert(coordi == ncoords);
     // Done with file
     fclose(f);
 
