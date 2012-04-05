@@ -132,7 +132,7 @@ void redraw(void)
 
         if (selectedJoint)
         {
-            glColor3fv(glm::value_ptr(selColor));
+            glColor3fv(glm::value_ptr(glm::vec3(0, 1, 0)));
             renderSelectedPoints(viewMatrix, mesh, selectedJoint->index);
         }
     }

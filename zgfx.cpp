@@ -52,6 +52,15 @@ rawmesh* loadRawMesh(const char *filename)
             verts[verti].pos[1] = atof(strtok(NULL, " "));
             verts[verti].pos[2] = atof(strtok(NULL, " "));
             verts[verti].pos[3] = 1.f; // homogenous coords
+
+            // GEOSMASH EXTENSION for skinning
+            const char *jointstr = strtok(NULL, " ");
+            if (jointstr)
+                joints[i] = atoi(joinstr);
+            else
+                joints[i] = 0;
+            printf("jointstr: %s\n", jointstr);
+
             ++verti;
         }
         else if (strcmp(cmd, "f") == 0)
@@ -60,15 +69,11 @@ rawmesh* loadRawMesh(const char *filename)
             faces[facei].verts[0] = parseFaceVert(strtok(NULL, " "));
             faces[facei].verts[1] = parseFaceVert(strtok(NULL, " "));
             faces[facei].verts[2] = parseFaceVert(strtok(NULL, " "));
-            printf("face: %d %d %d\n", faces[facei].verts[0],
-                    faces[facei].verts[1], faces[facei].verts[2]);
+            //printf("face: %d %d %d\n", faces[facei].verts[0],
+                    //faces[facei].verts[1], faces[facei].verts[2]);
             ++facei;
         }
     }
-
-    // XXX this just binds all the verts to the root joint
-    for (size_t i = 0; i < nverts; i++)
-        joints[i] = 0;
 
     assert(verti == nverts);
     assert(facei == nfaces);
