@@ -470,35 +470,53 @@ void autoSkinMesh()
             jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
     }
 
-    // For each vertex, find the closes joint and bind to it
-    // This is the naive version that is O(n^2), improve if necessary
+    // For each vertex, find the closest 2 joints and set weights according
+    // to distance
+    std::vector<float> dists;
     vert  *verts   = rmesh->verts;
     int   *joints  = rmesh->joints;
     float *weights = rmesh->weights;
     for (size_t i = 0; i < rmesh->nverts; i++)
     {
-        float best = HUGE_VAL;
-        int cur = -1;
-
-        for (size_t j = 0; j < jointPos.size(); j++)
+        dists.assign(jointPos.size(), HUGE_VAL);
+        for (size_t j = 0; j < dists.size(); j++)
         {
             glm::vec3 v = glm::make_vec3(verts[i].pos);
-            float dist = glm::length(jointPos[j] - v);
-            if (dist < best)
-            {
-                best = dist;
-                cur = j;
-            }
+            dists[j] = glm::length(jointPos[j] - v);
         }
 
-        joints[4*i + 0] = cur;
-        joints[4*i + 1] = 0;
+        // only take best two
+        for (size_t j = 0; j < 2; j++)
+        {
+            // Find best joint/dist pair
+            float best = HUGE_VAL;
+            int bestk = -1;
+            for (size_t k = 0; k < dists.size(); k++)
+            {
+                if (dists[k] < best)
+                {
+                    best = dists[k];
+                    bestk = k;
+                }
+            }
+
+            joints[4*i + j]  = bestk;
+            weights[4*i + j] = best;
+            dists[bestk] = HUGE_VAL;
+        }
+        // Set the rest to 0
         joints[4*i + 2] = 0;
         joints[4*i + 3] = 0;
-        weights[4*i + 0] = 1.f;
-        weights[4*i + 1] = 0.f;
         weights[4*i + 2] = 0.f;
         weights[4*i + 3] = 0.f;
+
+        // normalize weights
+        float sum = 0.f;
+        for (size_t j = 0; j < 4; j++)
+            sum += weights[4*i + j];
+        for (size_t j = 0; j < 4; j++)
+            if (weights[4*i + j] != 0.f)
+                weights[4*i + j] = 1 - (weights[4*i + j] / sum);
     }
 }
 
@@ -1060,16 +1078,18 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         //glm::vec3 trans = applyMatrix(jointMats[i], glm::vec3(0.f));
         //std::cout << "(" << i << ") quat: " << qrot << " trans: " << trans << '\n';
     }
-
     glm::mat4 modelMatrix = glm::inverse(getViewMatrix()) * transform;
 
+    // uniforms
     GLuint projectionUniform  = glGetUniformLocation(shader->program, "projectionMatrix");
     GLuint viewUniform        = glGetUniformLocation(shader->program, "viewMatrix");
     GLuint modelUniform       = glGetUniformLocation(shader->program, "modelMatrix");
     GLuint jointMatrixUniform = glGetUniformLocation(shader->program, "jointMatrices");
     GLuint colorUniform       = glGetUniformLocation(shader->program, "color");
+    // attribs
     GLuint positionAttrib     = glGetAttribLocation(shader->program, "position");
     GLuint jointAttrib        = glGetAttribLocation(shader->program, "joint");
+    GLuint weightAttrib       = glGetAttribLocation(shader->program, "weight");
     GLuint normalAttrib       = glGetAttribLocation(shader->program, "normal");
     GLuint coordAttrib        = glGetAttribLocation(shader->program, "texcoord");
 
@@ -1077,28 +1097,42 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
     glUniformMatrix4fv(projectionUniform, 1, GL_FALSE, glm::value_ptr(getProjectionMatrix()));
     glUniformMatrix4fv(viewUniform,  1, GL_FALSE, glm::value_ptr(getViewMatrix()));
     glUniformMatrix4fv(modelUniform,  1, GL_FALSE, glm::value_ptr(modelMatrix));
-    glUniform4fv(colorUniform, 1, glm::value_ptr(color));
     glUniformMatrix4fv(jointMatrixUniform, jointMats.size(), GL_FALSE, &jointMats.front()[0][0]);
+    glUniform4fv(colorUniform, 1, glm::value_ptr(color));
 
     glEnableVertexAttribArray(positionAttrib);
-    glEnableVertexAttribArray(jointAttrib);
     glEnableVertexAttribArray(normalAttrib);
     glEnableVertexAttribArray(coordAttrib);
+    glEnableVertexAttribArray(jointAttrib);
+    glEnableVertexAttribArray(weightAttrib);
+
+    /*
+    for (size_t i = 0; i < 30; i++)
+    {
+        for (size_t j = 0; j < 4; j++)
+            printf("%d %f, ", verts[i].joints[j], verts[i].weights[j]);
+        printf("\n");
+    }
+    */
+
     glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
             sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, pos));
-    glVertexAttribPointer(jointAttrib,    1, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, joints));
     glVertexAttribPointer(normalAttrib,   3, GL_FLOAT,  GL_FALSE,
             sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, norm));
     glVertexAttribPointer(coordAttrib,    2, GL_FLOAT,  GL_FALSE,
             sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, coord));
+    glVertexAttribIPointer(jointAttrib,    4, GL_INT,
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, joints));
+    glVertexAttribPointer(weightAttrib,   4, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, weights));
 
     glDrawArrays(GL_TRIANGLES, 0, nverts);
 
     glDisableVertexAttribArray(positionAttrib);
-    glDisableVertexAttribArray(jointAttrib);
     glDisableVertexAttribArray(normalAttrib);
     glDisableVertexAttribArray(coordAttrib);
+    glDisableVertexAttribArray(jointAttrib);
+    glDisableVertexAttribArray(weightAttrib);
     glUseProgram(0);
 }
 
