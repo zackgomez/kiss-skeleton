@@ -47,9 +47,11 @@ static glm::vec3 circleNDC;  // circle ndc coordinate
 static const Joint *selectedJoint = NULL;
 static glm::vec2 dragStart;
 static float zoomStart; // starting zoom level of a zoom drag
+static glm::vec3 originStart;
 static bool rotating = false;
 static bool dragging = false;
 static bool zooming  = false;
+static bool translating = false;
 static int meshMode = NO_MESH_MODE;
 static int editMode = TRANSLATION_MODE;
 
@@ -57,7 +59,7 @@ static int editMode = TRANSLATION_MODE;
 static int startFrame = 1;
 static int endFrame = 60;
 static int currentFrame = 1;
-static std::vector<int> keyframes();
+static std::vector<int> keyframes;
 static std::vector<SkeletonPose*> keyframePoses();
 
 // translation mode variables
@@ -257,7 +259,13 @@ void mouse(int button, int state, int x, int y)
                 zoomStart = arcball->getZoom();
                 zooming = true;
             }
-            else
+            else if (glutGetModifiers() & GLUT_ACTIVE_SHIFT)
+            {
+                dragStart = clickToScreenPos(x, y);
+                originStart = arcball->getOrigin();
+                translating = true;
+            }
+            else if (!glutGetModifiers())
             {
                 glm::vec2 screenPos = clickToScreenPos(x, y);
                 glm::vec3 ndc(screenPos, 0.f);
@@ -269,6 +277,7 @@ void mouse(int button, int state, int x, int y)
         {
             rotating = false;
             zooming = false;
+            translating = false;
         }
     }
     // Mouse wheel (buttons 3 and 4) zooms in an out (translates camera)
@@ -314,6 +323,19 @@ void motion(int x, int y)
         arcball->setZoom(newZoom);
 
         // std::cout << "fact: " << fact << " newZoom: " << newZoom << '\n';
+    }
+    else if (translating)
+    {
+        glm::vec2 delta = clickToScreenPos(x, y) - dragStart;
+        // Get the translation plane
+        glm::vec3 up = applyMatrix(glm::inverse(getViewMatrix()), glm::vec3(0, 1, 0), false);
+        glm::vec3 right = applyMatrix(glm::inverse(getViewMatrix()), glm::vec3(1, 0, 0), false);
+
+        // move about the plane!
+        glm::vec3 originDelta =
+            up * -delta.y + right * -delta.x;
+
+        arcball->setOrigin(originStart + 10.f * originDelta);
     }
 
     glutPostRedisplay();
