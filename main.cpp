@@ -16,6 +16,7 @@
 
 // constants
 static int windowWidth = 800, windowHeight = 600;
+static int timelineHeight = 200;
 static const float arcballRadius = 10.f;
 static const float zoomSpeed = 2.f;
 static const float selectThresh = 0.02f;
@@ -48,6 +49,13 @@ static bool dragging = false;
 static bool zooming  = false;
 static int meshMode = NO_MESH_MODE;
 static int editMode = TRANSLATION_MODE;
+
+// Timeline vars
+static int startFrame = 1;
+static int endFrame = 60;
+static int currentFrame = 1;
+static std::vector<int> keyframes();
+static std::vector<SkeletonPose*> keyframePoses();
 
 // translation mode variables
 static glm::vec3 startingPos; // the parent space starting pos of selectedJoint
@@ -90,6 +98,7 @@ static void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh);
 static void renderFaces(const glm::mat4 &transform, vert *verts, size_t nverts,
         face* faces, size_t nfaces);
 static void renderSkinnedMesh(const glm::mat4 &transform, rawmesh *mesh);
+static void renderTimeline();
 
 static glm::mat4 getViewMatrix();
 static glm::mat4 getProjectionMatrix();
@@ -117,6 +126,9 @@ void redraw(void)
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Render main window
+    glViewport(0, timelineHeight, windowWidth, windowHeight - timelineHeight);
 
     // Render the joints
     const std::vector<Joint*> joints = skeleton->getJoints();
@@ -146,6 +158,10 @@ void redraw(void)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
+    // Render timeline
+    glViewport(0, 0, windowWidth, timelineHeight);
+    renderTimeline();
+
     glutSwapBuffers();
 }
 
@@ -159,7 +175,7 @@ void reshape(int width, int height)
 
     glViewport(0, 0, windowWidth, windowHeight);
 
-    arcball->setAspect((float) windowWidth / windowHeight);
+    arcball->setAspect((float) windowWidth / (windowHeight - timelineHeight));
 }
 
 void mouse(int button, int state, int x, int y)
@@ -167,26 +183,44 @@ void mouse(int button, int state, int x, int y)
     // Left button possible starts an edit
     if (button == GLUT_LEFT_BUTTON)
     {
-        // If button up, nothing to do...
-        if (state == GLUT_UP)
+        // Handles main window actions
+        if(y <= windowHeight - timelineHeight)
         {
-            dragging = false;
-            return;
-        }
-        // If no joint selected, nothing to do
-        if (!selectedJoint) return;
+            // If button up, nothing to do...
+            if (state == GLUT_UP)
+            {
+                dragging = false;
+                return;
+            }
+            // If no joint selected, nothing to do
+            if (!selectedJoint) return;
 
-        glm::vec2 clickPos = clickToScreenPos(x, y);
-        if (clickPos == glm::vec2(HUGE_VAL))
-            return;
-        if (editMode == TRANSLATION_MODE)
-            setTranslationVec(clickPos);
-        else if (editMode == ROTATION_MODE)
-            setRotationVec(clickPos);
-        else if (editMode == SCALE_MODE)
-            setScaleVec(clickPos);
+            glm::vec2 clickPos = clickToScreenPos(x, y);
+            if (clickPos == glm::vec2(HUGE_VAL))
+                return;
+            if (editMode == TRANSLATION_MODE)
+                setTranslationVec(clickPos);
+            else if (editMode == ROTATION_MODE)
+                setRotationVec(clickPos);
+            else if (editMode == SCALE_MODE)
+                setScaleVec(clickPos);
+            else
+                assert(false && "unknown mode");
+        }
+        // Handles timeline actions
         else
-            assert(false && "unknown mode");
+        {
+            // Select a frame
+            if (state == GLUT_UP) return;
+
+            if (y >= windowHeight - 0.75 * timelineHeight && 
+                    y <= windowHeight - 0.25 * timelineHeight)
+            {
+                currentFrame = startFrame + (x * (endFrame - startFrame + 1) + windowWidth * 0.5f) / windowWidth - 1;
+                if (currentFrame > endFrame) currentFrame = endFrame;
+                std::cout << currentFrame << std::endl;
+            }
+        }
     }
     // Right mouse selects and deselects bones
     else if (button == GLUT_RIGHT_BUTTON)
@@ -277,7 +311,7 @@ void motion(int x, int y)
         float newZoom = zoomStart * powf(zoomSpeed, fact);
         arcball->setZoom(newZoom);
 
-        std::cout << "fact: " << fact << " newZoom: " << newZoom << '\n';
+        // std::cout << "fact: " << fact << " newZoom: " << newZoom << '\n';
     }
 
     glutPostRedisplay();
@@ -397,7 +431,7 @@ int main(int argc, char **argv)
 
 glm::vec2 clickToScreenPos(int x, int y)
 {
-    glm::vec2 screencoord((float)x / windowWidth, (float)y / windowHeight);
+    glm::vec2 screencoord((float)x / windowWidth, (float)y / (windowHeight - timelineHeight));
     screencoord -= glm::vec2(0.5f);
     screencoord *= 2.f;
     screencoord.y = -screencoord.y;
@@ -1015,6 +1049,58 @@ void renderSkinnedMesh(const glm::mat4 &transform, rawmesh *mesh)
             mesh->faces, mesh->nfaces);
 
     free(skinned);
+}
+
+void renderTimeline()
+{
+    // Render in NDC coordinates, no projection matrix needed
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+
+    for(int i = startFrame; i <= endFrame; i++)
+    {
+        glColor3f(1.0f, 1.0f, 1.0f);
+        glRasterPos2f(-1.0, -1.0);
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, 't');
+        // Highlight current frame red
+        if (i == currentFrame)
+            glColor3f(1.0f, 0.f, 0.f);
+        else
+            glColor3f(1.0f, 1.0f, 1.0f);
+        glBegin(GL_LINES);
+            glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 1), 0.5f, 0);
+            glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 1), -0.5f, 0);
+        glEnd();
+        // std::cout << -1.0f + 2.f * i / (endFrame - startFrame) << std::endl;
+    }
+
+    // Foreground
+    glColor3f(0.5f, 0.5f, 0.5f);
+    glBegin(GL_QUADS);
+        glVertex3f(-1, 0.5f, 0);
+        glVertex3f(-1, -0.5f, 0);
+        glVertex3f(1, -0.5f, 0);
+        glVertex3f(1, 0.5f, 0);
+    glEnd();
+
+
+    // Background Color
+    glColor3f(0.25f, 0.25f, 0.25f);
+    glBegin(GL_QUADS);
+        glVertex3f(-1, 1, 0);
+        glVertex3f(-1, -1, 0);
+        glVertex3f(1, -1, 0);
+        glVertex3f(1, 1, 0);
+    glEnd();
+
+    // Fix matrices
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
