@@ -25,6 +25,7 @@ static const float circleRadius = 0.12f; //ndc
 static const float scaleCircleRadius = 0.15f; //ndc
 static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 static const int NO_MESH_MODE = 0, SKINNING_MODE = 1, POSING_MODE = 2;
+static const int FPS = 24;
 
 static const glm::vec3 selColor(0.8f, 0.4f, 0.2f);
 
@@ -57,7 +58,7 @@ static int editMode = TRANSLATION_MODE;
 static int startFrame = 1;
 static int endFrame = 60;
 static int currentFrame = 1;
-static std::map<int, SkeletonPose*> keyframes();
+static std::map<int, SkeletonPose*> keyframes;
 
 // translation mode variables
 static glm::vec3 startingPos; // the parent space starting pos of selectedJoint
@@ -78,6 +79,9 @@ static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::
 static void autoSkinMesh();
 static SkeletonPose* currentPose();
 static void writeSkeleton(const char *filename); // writes the current bind position as skeleton
+
+static void setPoseFromFrame(int frame);
+static void setFrame(int frame);
 
 static void setTranslationVec(const glm::vec2 &clickPos);
 static void setRotationVec(const glm::vec2 &clickPos);
@@ -217,7 +221,7 @@ void mouse(int button, int state, int x, int y)
             if (y >= windowHeight - 0.75 * timelineHeight && 
                     y <= windowHeight - 0.25 * timelineHeight)
             {
-                currentFrame = startFrame + (x * (endFrame - startFrame + 1) + windowWidth * 0.5f) / windowWidth - 1;
+                setFrame(startFrame + (x * (endFrame - startFrame + 1) + windowWidth * 0.5f) / windowWidth - 1);
                 if (currentFrame > endFrame) currentFrame = endFrame;
                 std::cout << currentFrame << std::endl;
             }
@@ -372,11 +376,11 @@ void keyboard(GLubyte key, GLint x, GLint y)
     // Keyframing: 'k' to create keyframe, 'l' to delete it.
     if (key == 'k' && meshMode == POSING_MODE)
     {
-        keyframes.insert( pair<int, SkeletonPose*>(currentFrame, currentPose));
+        keyframes[currentFrame] = currentPose();
     }
     if (key == 'l' && meshMode == POSING_MODE)
     {
-        
+       keyframes.erase(currentFrame); 
     }
 
     // Update display...
@@ -572,6 +576,20 @@ void writeSkeleton(const char *filename)
     }
 
     fclose(f);
+}
+
+void setPoseFromFrame(int frame)
+{
+    if (keyframes.count(frame) > 0)
+    {
+        skeleton->setPose(keyframes[frame]);
+    }
+}
+
+void setFrame(int frame)
+{
+    currentFrame = frame;
+    setPoseFromFrame(frame);
 }
 
 void setTranslationVec(const glm::vec2 &clickPos)
@@ -1162,6 +1180,8 @@ void renderTimeline()
             glColor3f(1.0f, 0.f, 0.f);
         else
             glColor3f(1.0f, 1.0f, 1.0f);
+        if (keyframes.count(i) > 0)
+            glColor3f(1.0f, 1.0f, 0.0f);
         glBegin(GL_LINES);
             glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 1), 0.5f, 0);
             glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 1), -0.5f, 0);
