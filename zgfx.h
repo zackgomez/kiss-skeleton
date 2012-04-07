@@ -28,6 +28,15 @@ struct vert_p4t2n3j1
     int joint;
 };
 
+struct vert_p4t2n3j5
+{
+    glm::vec4 pos;
+    glm::vec3 norml;
+    glm::vec2 coord;
+    int jointidx; // 4 1 byte joint indexes
+    float weights[4]; // 4 4byte joint weights
+};
+
 struct rawmesh
 {
     vert *verts;
