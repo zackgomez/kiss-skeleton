@@ -57,8 +57,7 @@ static int editMode = TRANSLATION_MODE;
 static int startFrame = 1;
 static int endFrame = 60;
 static int currentFrame = 1;
-static std::vector<int> keyframes();
-static std::vector<SkeletonPose*> keyframePoses();
+static std::map<int, SkeletonPose*> keyframes();
 
 // translation mode variables
 static glm::vec3 startingPos; // the parent space starting pos of selectedJoint
@@ -370,6 +369,16 @@ void keyboard(GLubyte key, GLint x, GLint y)
         writeRawMesh(rmesh, "mesh.out.obj");
         writeSkeleton("skeleton.out.bones");
     }
+    // Keyframing: 'k' to create keyframe, 'l' to delete it.
+    if (key == 'k' && meshMode == POSING_MODE)
+    {
+        keyframes.insert( pair<int, SkeletonPose*>(currentFrame, currentPose));
+    }
+    if (key == 'l' && meshMode == POSING_MODE)
+    {
+        
+    }
+
     // Update display...
     glutPostRedisplay();
 }
@@ -1114,9 +1123,6 @@ void renderTimeline()
 
     for(int i = startFrame; i <= endFrame; i++)
     {
-        glColor3f(1.0f, 1.0f, 1.0f);
-        glRasterPos2f(-1.0, -1.0);
-        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, 't');
         // Highlight current frame red
         if (i == currentFrame)
             glColor3f(1.0f, 0.f, 0.f);
