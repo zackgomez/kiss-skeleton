@@ -102,9 +102,7 @@ rawmesh* loadRawMesh(const char *filename, bool skinned)
                         const char *weightstr = strtok(NULL, " ");
                         assert(weightstr);
                         weights[4*verti + i] = atof(weightstr);
-                        printf("%d %f ", joints[4*verti + i], weights[4*verti + i]);
                     }
-                    printf("\n");
                 }
             }
             ++verti;
@@ -286,13 +284,15 @@ vert_p4t2n3j8 * createSkinnedVertArray(const rawmesh *mesh, size_t *nverts)
 
         for (size_t j = 0; j < 3; j++)
         {
-            ret[vi].pos   = glm::make_vec4(mesh->verts[ff.fverts[j].v].pos);
+            size_t v = ff.fverts[j].v;
+            ret[vi].pos   = glm::make_vec4(mesh->verts[v].pos);
             ret[vi].norm  = mesh->norms[ff.fverts[j].vn];
             ret[vi].coord = mesh->coords[ff.fverts[j].vt];
             for (size_t k = 0; k < 4; k++)
-                ret[vi].joints[k] = mesh->joints[ff.fverts[j].v*4 + k];
-            for (size_t k = 0; k < 4; k++)
-                ret[vi].weights[k] = mesh->weights[ff.fverts[j].v*4 + k];
+            {
+                ret[vi].joints[k] = mesh->joints[4*v + k];
+                ret[vi].weights[k] = mesh->weights[4*v + k];
+            }
             ++vi;
         }
     }
