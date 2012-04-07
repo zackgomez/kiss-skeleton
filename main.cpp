@@ -145,7 +145,7 @@ void redraw(void)
     else if (meshMode == POSING_MODE)
     {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        renderSkinnedMesh(viewMatrix, verts, nverts, glm::vec4(1.f));
+        renderSkinnedMesh(viewMatrix, verts, nverts, glm::vec4(0.7f));
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
@@ -1012,30 +1012,44 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j1 *verts,
         //std::cout << "(" << i << ") quat: " << qrot << " trans: " << trans << '\n';
     }
 
+    glm::mat4 modelMatrix = glm::inverse(getViewMatrix()) * transform;
+
     GLuint projectionUniform  = glGetUniformLocation(shader->program, "projectionMatrix");
-    GLuint modelViewUniform   = glGetUniformLocation(shader->program, "modelViewMatrix");
+    GLuint viewUniform        = glGetUniformLocation(shader->program, "viewMatrix");
+    GLuint modelUniform       = glGetUniformLocation(shader->program, "modelMatrix");
     GLuint jointMatrixUniform = glGetUniformLocation(shader->program, "jointMatrices");
     GLuint colorUniform       = glGetUniformLocation(shader->program, "color");
     GLuint positionAttrib     = glGetAttribLocation(shader->program, "position");
     GLuint jointAttrib        = glGetAttribLocation(shader->program, "joint");
+    GLuint normalAttrib       = glGetAttribLocation(shader->program, "normal");
+    GLuint coordAttrib        = glGetAttribLocation(shader->program, "texcoord");
 
     glUseProgram(shader->program);
     glUniformMatrix4fv(projectionUniform, 1, GL_FALSE, glm::value_ptr(getProjectionMatrix()));
-    glUniformMatrix4fv(modelViewUniform,  1, GL_FALSE, glm::value_ptr(transform));
+    glUniformMatrix4fv(viewUniform,  1, GL_FALSE, glm::value_ptr(getViewMatrix()));
+    glUniformMatrix4fv(modelUniform,  1, GL_FALSE, glm::value_ptr(modelMatrix));
     glUniform4fv(colorUniform, 1, glm::value_ptr(color));
     glUniformMatrix4fv(jointMatrixUniform, jointMats.size(), GL_FALSE, &jointMats.front()[0][0]);
 
     glEnableVertexAttribArray(positionAttrib);
     glEnableVertexAttribArray(jointAttrib);
+    glEnableVertexAttribArray(normalAttrib);
+    glEnableVertexAttribArray(coordAttrib);
     glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
             sizeof(vert_p4t2n3j1), (void*)verts + offsetof(vert_p4t2n3j1, pos));
     glVertexAttribPointer(jointAttrib,    1, GL_FLOAT,  GL_FALSE,
             sizeof(vert_p4t2n3j1), (void*)verts + offsetof(vert_p4t2n3j1, joint));
+    glVertexAttribPointer(normalAttrib,   3, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j1), (void*)verts + offsetof(vert_p4t2n3j1, norm));
+    glVertexAttribPointer(coordAttrib,    2, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j1), (void*)verts + offsetof(vert_p4t2n3j1, coord));
 
     glDrawArrays(GL_TRIANGLES, 0, nverts);
 
     glDisableVertexAttribArray(positionAttrib);
     glDisableVertexAttribArray(jointAttrib);
+    glDisableVertexAttribArray(normalAttrib);
+    glDisableVertexAttribArray(coordAttrib);
     glUseProgram(0);
 }
 
