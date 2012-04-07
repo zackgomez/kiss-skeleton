@@ -88,7 +88,8 @@ static void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &w
 static void renderCircle(const glm::mat4 &worldTransform);
 static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
-static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint);
+static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
+        const glm::vec4 &color);
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts, size_t nverts);
 static void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color);
@@ -136,8 +137,8 @@ void redraw(void)
 
         if (selectedJoint)
         {
-            glColor3fv(glm::value_ptr(glm::vec3(0, 1, 0)));
-            renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index);
+            renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
+                    glm::vec4(0,1,0,1));
         }
     }
     else if (meshMode == POSING_MODE)
@@ -976,18 +977,24 @@ void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)
     glPointSize(1);
 }
 
-void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint)
+void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
+        const glm::vec4 &color)
 {
     glLoadMatrixf(glm::value_ptr(transform));
     const size_t nverts = mesh->nverts;
     const vert* verts = mesh->verts;
-    const int* weights = mesh->joints;
+    const int* joints = mesh->joints;
+    const float* weights = mesh->weights;
 
     glPointSize(5);
     glBegin(GL_POINTS);
     for (size_t i = 0; i < nverts; i++)
-        if (weights[i] == joint)
-            glVertex4fv(verts[i].pos);
+        for (size_t j = 0; j < 4; j++)
+            if (joints[4*i + j] == joint)
+            {
+                glColor4fv(glm::value_ptr(color * weights[4*i+j]));
+                glVertex4fv(verts[i].pos);
+            }
     glEnd();
     glPointSize(1);
 }
