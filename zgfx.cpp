@@ -10,7 +10,7 @@ static void show_info_log( GLuint object, PFNGLGETSHADERIVPROC glGet__iv,
         PFNGLGETSHADERINFOLOGPROC glGet__InfoLog);
 static void *file_contents(const char *filename, GLint *length);
 
-rawmesh* loadRawMesh(const char *filename)
+rawmesh* loadRawMesh(const char *filename, bool skinned)
 {
     FILE *f = fopen(filename, "r");
     if (!f)
@@ -21,12 +21,15 @@ rawmesh* loadRawMesh(const char *filename)
 
     // First count the number of vertices and faces
     unsigned nverts = 0, nfaces = 0, nnorms = 0, ncoords = 0;
+    // Are we reading an objfile with geosmash extensions?
+    bool extended = false;
     // lines should never be longer than 1024 in a .obj...
     char buf[1024];
 
     while (fgets(buf, sizeof(buf), f))
     {
         char *cmd = strtok(buf, " ");
+        char *arg = strtok(NULL, " ");
         if (strcmp(cmd, "v") == 0)
             nverts++;
         if (strcmp(cmd, "f") == 0)
@@ -35,21 +38,24 @@ rawmesh* loadRawMesh(const char *filename)
             nnorms++;
         if (strcmp(cmd, "vt") == 0)
             ncoords++;
+        if (strcmp(cmd, "ext") == 0 && strcmp(arg, "geosmash"))
+            extended = true;
     }
 
-    printf("verts: %d, faces: %d, norms: %d, coords: %d\n",
-            nverts, nfaces, nnorms, ncoords);
+    printf("verts: %d, faces: %d, norms: %d, coords: %d, extended: %d\n",
+            nverts, nfaces, nnorms, ncoords, extended);
 
     // Allocate space
-    vert *verts = (vert*) malloc(sizeof(vert) * nverts);
-    int  *joints = (int*) malloc(sizeof(int)  * nverts);
-    face *faces = (face*) malloc(sizeof(face) * nfaces);
-    fullface *ffaces = (fullface*) malloc(sizeof(fullface) * nfaces);
-    glm::vec2 *coords = (glm::vec2*) malloc(sizeof(glm::vec2) * ncoords);
-    glm::vec3 *norms = (glm::vec3*) malloc(sizeof(glm::vec3) * nnorms);
-
-    // XXX replace this will some real checks
-    assert(faces && verts && joints && norms && coords);
+    vert      *verts   = (vert*) malloc(sizeof(vert) * nverts);
+    fullface  *ffaces  = (fullface*) malloc(sizeof(fullface) * nfaces);
+    glm::vec2 *coords  = (glm::vec2*) malloc(sizeof(glm::vec2) * ncoords);
+    glm::vec3 *norms   = (glm::vec3*) malloc(sizeof(glm::vec3) * nnorms);
+    assert(verts && norms && coords && ffaces);
+    // Now allocate the geosmash skinning data if requested
+    int       *joints  = skinned ? (int*) malloc(sizeof(int) * nverts * 4) : NULL;
+    float     *weights = skinned ? (float*) malloc(sizeof(float) * nverts * 4) : NULL;
+    assert(!skinned || (joints && weights));
+    // TODO replace asserts will some real memory checks
 
     // reset to beginning of file
     fseek(f,  0, SEEK_SET);
@@ -69,13 +75,38 @@ rawmesh* loadRawMesh(const char *filename)
             verts[verti].pos[3] = 1.f; // homogenous coords
 
             // GEOSMASH EXTENSION for skinning
-            const char *jointstr = strtok(NULL, " ");
-            //printf("jointstr: %s\n", jointstr);
-            if (jointstr)
-                joints[verti] = atoi(jointstr);
-            else
-                joints[verti] = 0;
-
+            if (skinned)
+            {
+                // If we're reading the extended format, then this data is present
+                // in the file, otherwise we should just set all joints to 0 and
+                // the first joint weight to 1 and others to 0
+                if (!extended)
+                {
+                    joints[4*verti + 0] = 0;
+                    joints[4*verti + 1] = 0;
+                    joints[4*verti + 2] = 0;
+                    joints[4*verti + 3] = 0;
+                    weights[4*verti + 0] = 1.f;
+                    weights[4*verti + 1] = 0.f;
+                    weights[4*verti + 2] = 0.f;
+                    weights[4*verti + 3] = 0.f;
+                }
+                // Read the joint/weight pairs, assume there are 4 pairs
+                else
+                {
+                    for (size_t i = 0; i < 4; i++)
+                    {
+                        const char *jointstr = strtok(NULL, " ");
+                        assert(jointstr);
+                        joints[4*verti + i] = atoi(jointstr);
+                        const char *weightstr = strtok(NULL, " ");
+                        assert(weightstr);
+                        weights[4*verti + i] = atof(weightstr);
+                        printf("%d %f ", joints[4*verti + i], weights[4*verti + i]);
+                    }
+                    printf("\n");
+                }
+            }
             ++verti;
         }
         else if (strcmp(cmd, "f") == 0)
@@ -84,11 +115,6 @@ rawmesh* loadRawMesh(const char *filename)
             ffaces[facei].fverts[0] = parseFaceVert(strtok(NULL, " "));
             ffaces[facei].fverts[1] = parseFaceVert(strtok(NULL, " "));
             ffaces[facei].fverts[2] = parseFaceVert(strtok(NULL, " "));
-
-            // This is just for rendering convenience...
-            faces[facei].verts[0] = ffaces[facei].fverts[0].v;
-            faces[facei].verts[1] = ffaces[facei].fverts[1].v;
-            faces[facei].verts[2] = ffaces[facei].fverts[2].v;
             ++facei;
         }
         else if (strcmp(cmd, "vn") == 0)
@@ -116,16 +142,16 @@ rawmesh* loadRawMesh(const char *filename)
     rawmesh *rmesh = (rawmesh*) malloc(sizeof(rawmesh));
     // XXX again better error checking
     assert(rmesh);
-    rmesh->verts  = verts;
-    rmesh->joints = joints;
-    rmesh->faces  = faces;
-    rmesh->ffaces = ffaces;
-    rmesh->norms  = norms;
-    rmesh->coords = coords;
-    rmesh->nverts = nverts;
-    rmesh->nfaces = nfaces;
-    rmesh->nnorms = nnorms;
-    rmesh->ncoords= ncoords;
+    rmesh->verts   = verts;
+    rmesh->joints  = joints;
+    rmesh->weights = weights;
+    rmesh->ffaces  = ffaces;
+    rmesh->norms   = norms;
+    rmesh->coords  = coords;
+    rmesh->nverts  = nverts;
+    rmesh->nfaces  = nfaces;
+    rmesh->nnorms  = nnorms;
+    rmesh->ncoords = ncoords;
 
     return rmesh;
 }
@@ -151,9 +177,10 @@ void freeRawMesh(rawmesh *rmesh)
     if (!rmesh) return;
 
     free(rmesh->verts);
-    free(rmesh->faces);
     free(rmesh->norms);
     free(rmesh->coords);
+    free(rmesh->joints);
+    free(rmesh->weights);
     free(rmesh);
 }
 
@@ -166,15 +193,27 @@ void writeRawMesh(rawmesh *rmesh, const char *filename)
         return;
     }
 
+
     // Write a comment saying kiss-skeleton did it
     fprintf(f, "# kiss-skeleton v0.00 OBJ File: '%s'\n", filename);
+    // if the mesh contains skinning data, write out extension command
+    bool extended = rmesh->joints && rmesh->weights;
+    if (extended)
+        fprintf(f, "ext geosmash\n");
 
     // verts
-    const vert* verts = rmesh->verts;
-    const int* joints = rmesh->joints;
+    const vert    *verts = rmesh->verts;
+    const int    *joints = rmesh->joints;
+    const float *weights = rmesh->weights;
     for (size_t i = 0; i < rmesh->nverts; i++)
-        fprintf(f, "v %f %f %f %d\n",
-                verts[i].pos[0], verts[i].pos[1], verts[i].pos[2], joints[i]);
+    {
+        fprintf(f, "v %f %f %f",
+                verts[i].pos[0], verts[i].pos[1], verts[i].pos[2]);
+        // Print out skinning data v x y z j0 w0 j1 w1 ... j3 w3
+        for (size_t j = 0; extended && j < 4; j++)
+            fprintf(f, " %d %f", joints[i*4 + j], weights[i*4 + j]);
+        fprintf(f, "\n");
+    }
     // coords
     const glm::vec2 *coords = rmesh->coords;
     for (size_t i = 0; i < rmesh->ncoords; i++)
@@ -197,10 +236,10 @@ void writeRawMesh(rawmesh *rmesh, const char *filename)
     fclose(f);
 }
 
-vert_p4t2n3j1 * createVertArray(const rawmesh *mesh, size_t *nverts)
+vert_p4t2n3 * createVertArray(const rawmesh *mesh, size_t *nverts)
 {
     *nverts = mesh->nfaces * 3;
-    vert_p4t2n3j1 *ret = (vert_p4t2n3j1 *) malloc(*nverts * sizeof(vert_p4t2n3j1));
+    vert_p4t2n3 *ret = (vert_p4t2n3 *) malloc(*nverts * sizeof(vert_p4t2n3));
     if (!ret)
     {
         fprintf(stderr, "Unable to allocate memory for vert array\n");
@@ -216,9 +255,44 @@ vert_p4t2n3j1 * createVertArray(const rawmesh *mesh, size_t *nverts)
         for (size_t j = 0; j < 3; j++)
         {
             ret[vi].pos   = glm::make_vec4(mesh->verts[ff.fverts[j].v].pos);
-            ret[vi].joint = mesh->joints[ff.fverts[j].v];
             ret[vi].norm  = mesh->norms[ff.fverts[j].vn];
             ret[vi].coord = mesh->coords[ff.fverts[j].vt];
+            ++vi;
+        }
+    }
+    assert(vi == *nverts);
+
+    return ret;
+}
+
+vert_p4t2n3j8 * createSkinnedVertArray(const rawmesh *mesh, size_t *nverts)
+{
+    // This requires the extended vertex data
+    assert(mesh->joints && mesh->weights);
+
+    *nverts = mesh->nfaces * 3;
+    vert_p4t2n3j8 *ret = (vert_p4t2n3j8 *) malloc(*nverts * sizeof(vert_p4t2n3j8));
+    if (!ret)
+    {
+        fprintf(stderr, "Unable to allocate memory for vert array\n");
+        *nverts = 0;
+        return NULL;
+    }
+
+    size_t vi = 0;
+    for (size_t i = 0; i < mesh->nfaces; i++)
+    {
+        const fullface &ff = mesh->ffaces[i];
+
+        for (size_t j = 0; j < 3; j++)
+        {
+            ret[vi].pos   = glm::make_vec4(mesh->verts[ff.fverts[j].v].pos);
+            ret[vi].norm  = mesh->norms[ff.fverts[j].vn];
+            ret[vi].coord = mesh->coords[ff.fverts[j].vt];
+            for (size_t k = 0; k < 4; k++)
+                ret[vi].joints[k] = mesh->joints[ff.fverts[j].v*4 + k];
+            for (size_t k = 0; k < 4; k++)
+                ret[vi].weights[k] = mesh->weights[ff.fverts[j].v*4 + k];
             ++vi;
         }
     }

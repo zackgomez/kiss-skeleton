@@ -33,7 +33,7 @@ static Arcball *arcball;
 static rawmesh *rmesh;
 static shader  *shader;
 static const char *skelfile, *meshfile;
-static vert_p4t2n3j1 *verts;
+static vert_p4t2n3j8 *verts;
 static size_t nverts;
 SkeletonPose *bindPose;
 SkeletonPose *editPose; // the "pose mode" current pose
@@ -89,10 +89,8 @@ static void renderCircle(const glm::mat4 &worldTransform);
 static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
 static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint);
-static void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh);
-static void renderFaces(const glm::mat4 &transform, vert *verts, size_t nverts,
-        face* faces, size_t nfaces);
-static void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j1 *verts,
+static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts, size_t nverts);
+static void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color);
 
 static glm::mat4 getViewMatrix();
@@ -134,7 +132,7 @@ void redraw(void)
         renderPoints(viewMatrix, rmesh->verts, rmesh->nverts);
 
         glColor4fv(glm::value_ptr(glm::vec4(selColor, 0.5f)));
-        renderRawMesh(viewMatrix, rmesh);
+        renderMesh(viewMatrix, verts, nverts);
 
         if (selectedJoint)
         {
@@ -305,6 +303,8 @@ void keyboard(GLubyte key, GLint x, GLint y)
         freeSkeletonPose(editPose);
         editPose = currentPose();
         autoSkinMesh();
+        free(verts);
+        verts = createSkinnedVertArray(rmesh, &nverts);
     }
     // Tab
     if (key == 9 && meshMode != NO_MESH_MODE)
@@ -388,8 +388,8 @@ int main(int argc, char **argv)
     rmesh = NULL;
     if (meshfile)
     {
-        rmesh = loadRawMesh(meshfile);
-        verts = createVertArray(rmesh, &nverts);
+        rmesh = loadRawMesh(meshfile, true /* skinning data */);
+        verts = createSkinnedVertArray(rmesh, &nverts);
         meshMode = SKINNING_MODE;
     }
 
@@ -422,18 +422,24 @@ glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
 
 void autoSkinMesh()
 {
-    assert(rmesh);
+    // TODO update this to use a better algorithm
+    // Requires a mesh with skinning data
+    assert(rmesh && rmesh->joints && rmesh->weights);
 
-    const std::vector<Joint*> joints = skeleton->getJoints();
     // First get all the joint world positions for easy access
-    std::vector<glm::vec3> jointPos(joints.size());
-    for (size_t i = 0; i < joints.size(); i++)
-        jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
+    std::vector<glm::vec3> jointPos;
+    {
+        const std::vector<Joint*> joints = skeleton->getJoints();
+        jointPos = std::vector<glm::vec3>(joints.size());
+        for (size_t i = 0; i < joints.size(); i++)
+            jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
+    }
 
     // For each vertex, find the closes joint and bind to it
     // This is the naive version that is O(n^2), improve if necessary
-    vert* verts = rmesh->verts;
-    int*  weights = rmesh->joints;
+    vert  *verts   = rmesh->verts;
+    int   *joints  = rmesh->joints;
+    float *weights = rmesh->weights;
     for (size_t i = 0; i < rmesh->nverts; i++)
     {
         float best = HUGE_VAL;
@@ -450,7 +456,14 @@ void autoSkinMesh()
             }
         }
 
-        weights[i] = cur;
+        joints[4*i + 0] = cur;
+        joints[4*i + 1] = 0;
+        joints[4*i + 2] = 0;
+        joints[4*i + 3] = 0;
+        weights[4*i + 0] = 1.f;
+        weights[4*i + 1] = 0.f;
+        weights[4*i + 2] = 0.f;
+        weights[4*i + 3] = 0.f;
     }
 }
 
@@ -979,23 +992,18 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint)
     glPointSize(1);
 }
 
-void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
-{
-    renderFaces(transform, mesh->verts, mesh->nverts,
-            mesh->faces, mesh->nfaces);
-}
-
-void renderFaces(const glm::mat4 &transform, vert *verts, size_t nverts,
-    face *faces, size_t nfaces)
+void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+        size_t nverts)
 {
     glLoadMatrixf(glm::value_ptr(transform));
+
     glEnableClientState(GL_VERTEX_ARRAY);
-    glVertexPointer(4, GL_FLOAT, sizeof(vert), verts + offsetof(vert, pos));
-    glDrawElements(GL_TRIANGLES, 3*nfaces, GL_UNSIGNED_INT, faces);
+    glVertexPointer(4, GL_FLOAT, sizeof(vert_p4t2n3j8), &verts[0].pos);
+    glDrawArrays(GL_TRIANGLES, 0, nverts);
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j1 *verts,
+void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color)
 {
     const std::vector<Joint*> joints = skeleton->getJoints();
@@ -1036,13 +1044,13 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j1 *verts,
     glEnableVertexAttribArray(normalAttrib);
     glEnableVertexAttribArray(coordAttrib);
     glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
-            sizeof(vert_p4t2n3j1), (void*)verts + offsetof(vert_p4t2n3j1, pos));
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, pos));
     glVertexAttribPointer(jointAttrib,    1, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j1), (void*)verts + offsetof(vert_p4t2n3j1, joint));
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, joints));
     glVertexAttribPointer(normalAttrib,   3, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j1), (void*)verts + offsetof(vert_p4t2n3j1, norm));
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, norm));
     glVertexAttribPointer(coordAttrib,    2, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j1), (void*)verts + offsetof(vert_p4t2n3j1, coord));
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, coord));
 
     glDrawArrays(GL_TRIANGLES, 0, nverts);
 
