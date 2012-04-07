@@ -45,4 +45,19 @@ void freeRawMesh(rawmesh *rmesh);
 
 void writeRawMesh(rawmesh *rmesh, const char *filename);
 
+
+
+// shader support
+struct shader
+{
+    GLuint program;
+    GLuint vertex_shader;
+    GLuint fragment_shader;
+    // perhaps add a geometry_shader here as well
+};
+GLuint  make_shader(GLenum type, const char *filename);
+shader* make_program(const char *vertfile, const char *fragfile);
+void    free_program(shader *s);
+
+
 #endif
