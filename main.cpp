@@ -31,8 +31,11 @@ static const glm::vec3 selColor(0.8f, 0.4f, 0.2f);
 // global vars
 static Skeleton *skeleton;
 static Arcball *arcball;
-static rawmesh *mesh;
+static rawmesh *rmesh;
+static shader  *shader;
 static const char *skelfile, *meshfile;
+static vert_p4t2n3j8 *verts;
+static size_t nverts;
 SkeletonPose *bindPose;
 SkeletonPose *editPose; // the "pose mode" current pose
 static std::vector<glm::vec3> jointNDC;
@@ -93,11 +96,11 @@ static void renderScaleCircle(const glm::mat4 &viewTransform, const glm::vec3 &w
 static void renderCircle(const glm::mat4 &worldTransform);
 static void renderRotationSphere(const glm::mat4 &worldTransform, const glm::vec3 &worldCoord);
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
-static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint);
-static void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh);
-static void renderFaces(const glm::mat4 &transform, vert *verts, size_t nverts,
-        face* faces, size_t nfaces);
-static void renderSkinnedMesh(const glm::mat4 &transform, rawmesh *mesh);
+static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
+        const glm::vec4 &color);
+static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts, size_t nverts);
+static void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+        size_t nverts, const glm::vec4 &color);
 static void renderTimeline();
 
 static glm::mat4 getViewMatrix();
@@ -139,22 +142,21 @@ void redraw(void)
     if (meshMode == SKINNING_MODE)
     {
         glColor3f(1.f, 1.f, 1.f);
-        renderPoints(viewMatrix, mesh->verts, mesh->nverts);
+        renderPoints(viewMatrix, rmesh->verts, rmesh->nverts);
 
         glColor4fv(glm::value_ptr(glm::vec4(selColor, 0.5f)));
-        renderRawMesh(viewMatrix, mesh);
+        renderMesh(viewMatrix, verts, nverts);
 
         if (selectedJoint)
         {
-            glColor3fv(glm::value_ptr(glm::vec3(0, 1, 0)));
-            renderSelectedPoints(viewMatrix, mesh, selectedJoint->index);
+            renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
+                    glm::vec4(0,1,0,1));
         }
     }
     else if (meshMode == POSING_MODE)
     {
-        glColor3f(1,1,1);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        renderSkinnedMesh(viewMatrix, mesh);
+        renderSkinnedMesh(viewMatrix, verts, nverts, glm::vec4(0.7f));
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
@@ -336,6 +338,8 @@ void keyboard(GLubyte key, GLint x, GLint y)
         freeSkeletonPose(editPose);
         editPose = currentPose();
         autoSkinMesh();
+        free(verts);
+        verts = createSkinnedVertArray(rmesh, &nverts);
     }
     // Tab
     if (key == 9 && meshMode != NO_MESH_MODE)
@@ -361,9 +365,9 @@ void keyboard(GLubyte key, GLint x, GLint y)
     {
         skeleton->setPose(bindPose);
     }
-    if (key == 'x' && mesh)
+    if (key == 'x' && rmesh)
     {
-        writeRawMesh(mesh, "mesh.out.obj");
+        writeRawMesh(rmesh, "mesh.out.obj");
         writeSkeleton("skeleton.out.bones");
     }
     // Update display...
@@ -405,6 +409,8 @@ int main(int argc, char **argv)
     // START MY SETUP
     // --------------------
 
+    shader = make_program("meshskin.v.glsl", "meshskin.f.glsl");
+
     arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 
     skeleton = new Skeleton();
@@ -414,10 +420,11 @@ int main(int argc, char **argv)
 
     jointNDC = std::vector<glm::vec3>(skeleton->getJoints().size());
 
-    mesh = NULL;
+    rmesh = NULL;
     if (meshfile)
     {
-        mesh = loadRawMesh(meshfile);
+        rmesh = loadRawMesh(meshfile, true /* skinning data */);
+        verts = createSkinnedVertArray(rmesh, &nverts);
         meshMode = SKINNING_MODE;
     }
 
@@ -450,19 +457,25 @@ glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
 
 void autoSkinMesh()
 {
-    assert(mesh);
+    // TODO update this to use a better algorithm
+    // Requires a mesh with skinning data
+    assert(rmesh && rmesh->joints && rmesh->weights);
 
-    const std::vector<Joint*> joints = skeleton->getJoints();
     // First get all the joint world positions for easy access
-    std::vector<glm::vec3> jointPos(joints.size());
-    for (size_t i = 0; i < joints.size(); i++)
-        jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
+    std::vector<glm::vec3> jointPos;
+    {
+        const std::vector<Joint*> joints = skeleton->getJoints();
+        jointPos = std::vector<glm::vec3>(joints.size());
+        for (size_t i = 0; i < joints.size(); i++)
+            jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
+    }
 
     // For each vertex, find the closes joint and bind to it
     // This is the naive version that is O(n^2), improve if necessary
-    vert* verts = mesh->verts;
-    int*  weights = mesh->joints;
-    for (size_t i = 0; i < mesh->nverts; i++)
+    vert  *verts   = rmesh->verts;
+    int   *joints  = rmesh->joints;
+    float *weights = rmesh->weights;
+    for (size_t i = 0; i < rmesh->nverts; i++)
     {
         float best = HUGE_VAL;
         int cur = -1;
@@ -478,7 +491,14 @@ void autoSkinMesh()
             }
         }
 
-        weights[i] = cur;
+        joints[4*i + 0] = cur;
+        joints[4*i + 1] = 0;
+        joints[4*i + 2] = 0;
+        joints[4*i + 3] = 0;
+        weights[4*i + 0] = 1.f;
+        weights[4*i + 1] = 0.f;
+        weights[4*i + 2] = 0.f;
+        weights[4*i + 3] = 0.f;
     }
 }
 
@@ -991,64 +1011,95 @@ void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)
     glPointSize(1);
 }
 
-void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint)
+void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
+        const glm::vec4 &color)
 {
     glLoadMatrixf(glm::value_ptr(transform));
     const size_t nverts = mesh->nverts;
     const vert* verts = mesh->verts;
-    const int* weights = mesh->joints;
+    const int* joints = mesh->joints;
+    const float* weights = mesh->weights;
 
     glPointSize(5);
     glBegin(GL_POINTS);
     for (size_t i = 0; i < nverts; i++)
-        if (weights[i] == joint)
-            glVertex4fv(verts[i].pos);
+        for (size_t j = 0; j < 4; j++)
+            if (joints[4*i + j] == joint)
+            {
+                glColor4fv(glm::value_ptr(color * weights[4*i+j]));
+                glVertex4fv(verts[i].pos);
+            }
     glEnd();
     glPointSize(1);
 }
 
-void renderRawMesh(const glm::mat4 &transform, rawmesh *mesh)
-{
-    renderFaces(transform, mesh->verts, mesh->nverts,
-            mesh->faces, mesh->nfaces);
-}
-
-void renderFaces(const glm::mat4 &transform, vert *verts, size_t nverts,
-    face *faces, size_t nfaces)
+void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+        size_t nverts)
 {
     glLoadMatrixf(glm::value_ptr(transform));
+
     glEnableClientState(GL_VERTEX_ARRAY);
-    glVertexPointer(4, GL_FLOAT, sizeof(vert), verts + offsetof(vert, pos));
-    glDrawElements(GL_TRIANGLES, 3*nfaces, GL_UNSIGNED_INT, faces);
+    glVertexPointer(4, GL_FLOAT, sizeof(vert_p4t2n3j8), &verts[0].pos);
+    glDrawArrays(GL_TRIANGLES, 0, nverts);
     glDisableClientState(GL_VERTEX_ARRAY);
 }
 
-void renderSkinnedMesh(const glm::mat4 &transform, rawmesh *mesh)
+void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+        size_t nverts, const glm::vec4 &color)
 {
     const std::vector<Joint*> joints = skeleton->getJoints();
     // First get a list of the necessary transformations
     std::vector<glm::mat4> jointMats(joints.size());
     for (size_t i = 0; i < joints.size(); i++)
+    {
         jointMats[i] = joints[i]->worldTransform * joints[i]->inverseBindTransform;
 
-    vert *skinned = (vert *) malloc(mesh->nverts * sizeof(vert));
-    for (size_t i = 0; i < mesh->nverts; i++)
-    {
-        assert(mesh->joints[i] >= 0 && mesh->joints[i] < jointMats.size());
-        const glm::mat4 &vmat = jointMats[mesh->joints[i]];
-        glm::vec4 sv = vmat * glm::make_vec4(mesh->verts[i].pos);
-        sv /= sv.w;
-        skinned[i].pos[0] = sv.x;
-        skinned[i].pos[1] = sv.y;
-        skinned[i].pos[2] = sv.z;
-        skinned[i].pos[3] = sv.w;
+        // for each transformation try to extract translation and rotation
+        // TODO turn these into dual quats and use to skin using dual quat blending
+        //glm::quat qrot  = glm::quat_cast(jointMats[i]);
+        //glm::vec3 trans = applyMatrix(jointMats[i], glm::vec3(0.f));
+        //std::cout << "(" << i << ") quat: " << qrot << " trans: " << trans << '\n';
     }
 
-    //renderPoints(transform, skinned, mesh->nverts);
-    renderFaces(transform, skinned, mesh->nverts,
-            mesh->faces, mesh->nfaces);
+    glm::mat4 modelMatrix = glm::inverse(getViewMatrix()) * transform;
 
-    free(skinned);
+    GLuint projectionUniform  = glGetUniformLocation(shader->program, "projectionMatrix");
+    GLuint viewUniform        = glGetUniformLocation(shader->program, "viewMatrix");
+    GLuint modelUniform       = glGetUniformLocation(shader->program, "modelMatrix");
+    GLuint jointMatrixUniform = glGetUniformLocation(shader->program, "jointMatrices");
+    GLuint colorUniform       = glGetUniformLocation(shader->program, "color");
+    GLuint positionAttrib     = glGetAttribLocation(shader->program, "position");
+    GLuint jointAttrib        = glGetAttribLocation(shader->program, "joint");
+    GLuint normalAttrib       = glGetAttribLocation(shader->program, "normal");
+    GLuint coordAttrib        = glGetAttribLocation(shader->program, "texcoord");
+
+    glUseProgram(shader->program);
+    glUniformMatrix4fv(projectionUniform, 1, GL_FALSE, glm::value_ptr(getProjectionMatrix()));
+    glUniformMatrix4fv(viewUniform,  1, GL_FALSE, glm::value_ptr(getViewMatrix()));
+    glUniformMatrix4fv(modelUniform,  1, GL_FALSE, glm::value_ptr(modelMatrix));
+    glUniform4fv(colorUniform, 1, glm::value_ptr(color));
+    glUniformMatrix4fv(jointMatrixUniform, jointMats.size(), GL_FALSE, &jointMats.front()[0][0]);
+
+    glEnableVertexAttribArray(positionAttrib);
+    glEnableVertexAttribArray(jointAttrib);
+    glEnableVertexAttribArray(normalAttrib);
+    glEnableVertexAttribArray(coordAttrib);
+    glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, pos));
+    glVertexAttribPointer(jointAttrib,    1, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, joints));
+    glVertexAttribPointer(normalAttrib,   3, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, norm));
+    glVertexAttribPointer(coordAttrib,    2, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, coord));
+
+    glDrawArrays(GL_TRIANGLES, 0, nverts);
+
+    glDisableVertexAttribArray(positionAttrib);
+    glDisableVertexAttribArray(jointAttrib);
+    glDisableVertexAttribArray(normalAttrib);
+    glDisableVertexAttribArray(coordAttrib);
+    glUseProgram(0);
 }
 
 void renderTimeline()
