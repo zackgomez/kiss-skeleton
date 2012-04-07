@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <glm/gtc/type_ptr.hpp>
 
 static facevert parseFaceVert(const char *vdef);
 static void show_info_log( GLuint object, PFNGLGETSHADERIVPROC glGet__iv,
@@ -95,8 +96,6 @@ rawmesh* loadRawMesh(const char *filename)
             norms[normi][0] = atof(strtok(NULL, " "));
             norms[normi][1] = atof(strtok(NULL, " "));
             norms[normi][2] = atof(strtok(NULL, " "));
-            printf("norm: %f %f %f\n", norms[normi][0],
-                    norms[normi][1], norms[normi][2]);
             ++normi;
         }
         else if (strcmp(cmd, "vt") == 0)
@@ -133,7 +132,6 @@ rawmesh* loadRawMesh(const char *filename)
 
 facevert parseFaceVert(const char *vdef)
 {
-    // TODO update this function to support texcoords and normals
     assert(vdef);
     char buf[1024];
     strncpy(buf, vdef, sizeof(buf));
@@ -199,6 +197,35 @@ void writeRawMesh(rawmesh *rmesh, const char *filename)
     fclose(f);
 }
 
+vert_p4t2n3j1 * createVertArray(const rawmesh *mesh, size_t *nverts)
+{
+    *nverts = mesh->nfaces * 3;
+    vert_p4t2n3j1 *ret = (vert_p4t2n3j1 *) malloc(*nverts * sizeof(vert_p4t2n3j1));
+    if (!ret)
+    {
+        fprintf(stderr, "Unable to allocate memory for vert array\n");
+        *nverts = 0;
+        return NULL;
+    }
+
+    size_t vi = 0;
+    for (size_t i = 0; i < mesh->nfaces; i++)
+    {
+        const fullface &ff = mesh->ffaces[i];
+
+        for (size_t j = 0; j < 3; j++)
+        {
+            ret[vi].pos   = glm::make_vec4(mesh->verts[ff.fverts[j].v].pos);
+            ret[vi].joint = mesh->joints[ff.fverts[j].v];
+            ret[vi].norm  = mesh->norms[ff.fverts[j].vn];
+            ret[vi].coord = mesh->coords[ff.fverts[j].vt];
+            ++vi;
+        }
+    }
+    assert(vi == *nverts);
+
+    return ret;
+}
 
 void show_info_log(
         GLuint object,

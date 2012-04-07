@@ -20,6 +20,14 @@ struct fullface
     facevert fverts[3];
 };
 
+struct vert_p4t2n3j1
+{
+    glm::vec4 pos;
+    glm::vec3 norm;
+    glm::vec2 coord;
+    int joint;
+};
+
 struct rawmesh
 {
     vert *verts;
@@ -44,6 +52,8 @@ rawmesh * loadRawMesh(const char *filename);
 void freeRawMesh(rawmesh *rmesh);
 
 void writeRawMesh(rawmesh *rmesh, const char *filename);
+
+vert_p4t2n3j1* createVertArray(const rawmesh *mesh, size_t *nverts);
 
 
 
