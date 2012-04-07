@@ -9,14 +9,20 @@ public:
     void start(const glm::vec3 &ndc);
     void move(const glm::vec3 &ndc);
 
-    void setAspect(float aspect);
     float getZoom() const;
+    glm::vec3 getOrigin() const;
+    glm::vec3 getUp() const;
+    glm::vec3 getRight() const;
+
+    void setAspect(float aspect);
     void setZoom(float);
+    void setOrigin(const glm::vec3 &origin);
 
     const glm::mat4 &getProjectionMatrix() const;
     const glm::mat4 &getViewMatrix() const;
 
 private:
+    glm::vec3 origin_;
     glm::vec3 eye_;
     float radius_;
     float znear_, zfar_;
@@ -30,7 +36,7 @@ private:
 
     void setProjectionMatrix();
     glm::vec3 ndcToSphere(const glm::vec3 &ndc) const;
-    static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec);
+    static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo = true);
     static glm::mat4 quatrot(float x, float y, float z, float w);
 };
 

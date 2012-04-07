@@ -4,7 +4,7 @@
 
 Arcball::Arcball(const glm::vec3 &eye, float radius, float aspect, float near,
         float far, float fov) :
-    eye_(eye), radius_(radius),
+    origin_(0.f), eye_(eye), radius_(radius),
     znear_(near), zfar_(far),
     aspect_(aspect), fov_(fov),
     projMat_(1.f), viewMat_(1.f),
@@ -28,6 +28,26 @@ void Arcball::setZoom(float zoom)
 float Arcball::getZoom() const
 {
     return eye_.z;
+}
+
+glm::vec3 Arcball::getOrigin() const
+{
+    return origin_;
+}
+
+glm::vec3 Arcball::getUp() const
+{
+    return applyMatrix(curRot_, glm::vec3(0, 1, 0), false);
+}
+
+glm::vec3 Arcball::getRight() const
+{
+    return applyMatrix(curRot_, glm::vec3(1, 0, 0), false);
+}
+
+void Arcball::setOrigin(const glm::vec3 &origin)
+{
+    origin_ = origin;
 }
 
 void Arcball::start(const glm::vec3 &ndc)
@@ -64,7 +84,7 @@ const glm::mat4 &Arcball::getViewMatrix() const
 {
     viewMat_ = glm::translate(glm::mat4(1.f), eye_);
     viewMat_ = viewMat_ * curRot_;
-    // TODO possible adjust origin from 0,0,0 by translating by -origin
+    viewMat_ = glm::translate(viewMat_, -origin_);
 
     return viewMat_;
 }
@@ -92,12 +112,12 @@ glm::vec3 Arcball::ndcToSphere(const glm::vec3 &ndc) const
     return ball;
 }
 
-glm::vec3 Arcball::applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec)
+glm::vec3 Arcball::applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
 {
-    glm::vec4 v(vec, 1);
-    v = mat * v;
-    v /= v.w;
-    return glm::vec3(v);
+    glm::vec4 pt(vec, homo ? 1 : 0);
+    pt = mat * pt;
+    if (homo) pt /= pt.w;
+    return glm::vec3(pt);
 }
 
 glm::mat4 Arcball::quatrot(float x, float y, float z, float w)
