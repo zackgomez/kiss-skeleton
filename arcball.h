@@ -8,6 +8,7 @@ public:
 
     void start(const glm::vec3 &ndc);
     void move(const glm::vec3 &ndc);
+	void translate(const glm::vec2 &change);
 
     float getZoom() const;
     glm::vec3 getOrigin() const;
@@ -33,6 +34,7 @@ private:
     glm::mat4 curRot_, lastRot_;
 
     glm::vec3 start_;
+	glm::vec3 originStart_;
 
     void setProjectionMatrix();
     glm::vec3 ndcToSphere(const glm::vec3 &ndc) const;
