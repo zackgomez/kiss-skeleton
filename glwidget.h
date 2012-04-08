@@ -75,6 +75,9 @@ private:
     void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
     void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
     void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
+    // Timeline functions
+    void setPoseFromFrame(int frame);
+    void setFrame(int frame);
 
     // Rendering helpers
     void renderTimeline();
@@ -101,5 +104,6 @@ private:
     static const float SELECT_THRESH;
     static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
     static const int NO_MESH_MODE = 0, SKINNING_MODE = 1, POSING_MODE = 2;
+    static const int FPS = 24;
 };
 

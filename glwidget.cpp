@@ -188,54 +188,72 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
     glm::vec2 screenCoord = clickToScreenPos(
             event->x(), event->y());
 
-    // Left button possibly starts an edit
-    if (event->button() == Qt::LeftButton && !dragging)
+    // Handle main window events
+    if (event->y() < windowHeight - timelineHeight)
     {
-        // If no joint selected, nothing to do
-        if (!selectedJoint) return;
-
-        if (screenCoord == glm::vec2(HUGE_VAL))
-            return;
-        if (editMode == TRANSLATION_MODE)
-            setTranslationVec(screenCoord);
-        else if (editMode == ROTATION_MODE)
-            setRotationVec(screenCoord);
-        else if (editMode == SCALE_MODE)
-            setScaleVec(screenCoord);
-        else
-            assert(false && "unknown mode");
-    }
-    // Middle button adjusts camera
-    else if (event->button() == Qt::MidButton)
-    {
-        glm::vec3 ndc(screenCoord, 0.f);
-        arcball->start(ndc);
-        dragStart = screenCoord;
-        zoomStart = arcball->getZoom();
-
-        // No button is arcball rotation
-        if (!event->modifiers())
-            rotating = true;
-        else if (event->modifiers() == Qt::CTRL)
-            zooming = true;
-        else if (event->modifiers() == Qt::SHIFT)
-            translating = true;
-    }
-    // Right mouse selects and deselects bones
-    else if (event->button() == Qt::RightButton)
-    {
-        selectedJoint = NULL;
-
-        // Find closest joint
-        float nearest = HUGE_VAL;
-        for (size_t i = 0; i < jointNDC.size(); i++)
+        // Left button possibly starts an edit
+        if (event->button() == Qt::LeftButton && !dragging)
         {
-            const glm::vec3 &ndc = jointNDC[i];
-            float dist = glm::length(screenCoord - glm::vec2(ndc));
-            if (dist < SELECT_THRESH && ndc.z < nearest)
+            // If no joint selected, nothing to do
+            if (!selectedJoint) return;
+
+            if (editMode == TRANSLATION_MODE)
+                setTranslationVec(screenCoord);
+            else if (editMode == ROTATION_MODE)
+                setRotationVec(screenCoord);
+            else if (editMode == SCALE_MODE)
+                setScaleVec(screenCoord);
+            else
+                assert(false && "unknown mode");
+        }
+        // Middle button adjusts camera
+        else if (event->button() == Qt::MidButton)
+        {
+            glm::vec3 ndc(screenCoord, 0.f);
+            arcball->start(ndc);
+            dragStart = screenCoord;
+            zoomStart = arcball->getZoom();
+
+            // No button is arcball rotation
+            if (!event->modifiers())
+                rotating = true;
+            else if (event->modifiers() == Qt::CTRL)
+                zooming = true;
+            else if (event->modifiers() == Qt::SHIFT)
+                translating = true;
+        }
+        // Right mouse selects and deselects bones
+        else if (event->button() == Qt::RightButton)
+        {
+            selectedJoint = NULL;
+
+            // Find closest joint
+            float nearest = HUGE_VAL;
+            for (size_t i = 0; i < jointNDC.size(); i++)
             {
-                selectedJoint = skeleton->getJoint(i);
-                nearest = ndc.z;
+                const glm::vec3 &ndc = jointNDC[i];
+                float dist = glm::length(screenCoord - glm::vec2(ndc));
+                if (dist < SELECT_THRESH && ndc.z < nearest)
+                {
+                    selectedJoint = skeleton->getJoint(i);
+                    nearest = ndc.z;
+                }
+            }
+        }
+    }
+    // Handle timeline actions
+    else
+    {
+        glm::vec2 timelineCoord(screenCoord.x,
+                (windowHeight - event->y()) / (float) timelineHeight);
+        std::cout << "timeline action @ " << timelineCoord << '\n';
+        if (event->button() == Qt::LeftButton)
+        {
+            if (timelineCoord.y > 0.25f && timelineCoord.y < 0.75f)
+            {
+                setFrame(startFrame + (event->x() * (endFrame - startFrame + 1) + windowWidth * 0.5f) / windowWidth - 1);
+                if (currentFrame > endFrame) currentFrame = endFrame;
+                std::cout << "Selected frame " << currentFrame << std::endl;
             }
         }
     }
@@ -502,6 +520,65 @@ void GLWidget::setJointScale(const Joint* joint, const glm::vec2 &dragPos)
     pose.scale = newScale;
     skeleton->setPose(selectedJoint->index, &pose);
 }
+
+void GLWidget::setPoseFromFrame(int frame)
+{
+    if (keyframes.count(frame) > 0)
+    {
+        skeleton->setPose(keyframes[frame]);
+    } 
+    else if (keyframes.size() > 1)
+    {
+        int lastKeyframe = currentFrame;
+        int nextKeyframe = currentFrame;
+        while (keyframes.count(lastKeyframe) == 0 && lastKeyframe > startFrame)
+            lastKeyframe--;
+        while (keyframes.count(nextKeyframe) == 0 && nextKeyframe < endFrame)
+            nextKeyframe++;
+        if (keyframes.count(lastKeyframe) == 0)
+            lastKeyframe = nextKeyframe;
+        if (keyframes.count(nextKeyframe) == 0)
+            nextKeyframe = lastKeyframe;
+        
+        // The normalized position of the current frame between the keyframes
+        float anim = 0.f;
+        if (nextKeyframe - lastKeyframe > 0)
+            anim = float(currentFrame - lastKeyframe) / (nextKeyframe - lastKeyframe);
+
+		assert(keyframes.count(lastKeyframe) && keyframes.count(nextKeyframe));
+		const SkeletonPose *last = keyframes[lastKeyframe];
+		const SkeletonPose *next = keyframes[nextKeyframe];
+		assert(last->poses.size() == next->poses.size());
+
+		SkeletonPose* pose = new SkeletonPose;
+		pose->poses.resize(last->poses.size());
+        for (int i = 0; i < pose->poses.size(); i++)
+        {
+			JointPose *jp = pose->poses[i] = new JointPose;
+            glm::vec3 startPos = last->poses[i]->pos;
+            glm::vec3 endPos = next->poses[i]->pos;
+            jp->pos = startPos + (endPos - startPos) * anim;
+
+            glm::quat startRot = axisAngleToQuat(last->poses[i]->rot);
+            glm::quat endRot = axisAngleToQuat(next->poses[i]->rot);
+            jp->rot = quatToAxisAngle(glm::normalize((1.f - anim) * startRot + anim * endRot));
+
+            float startScale = last->poses[i]->scale;
+            float endScale = next->poses[i]->scale;
+            jp->scale = startScale + (endScale - startScale) * anim;
+        }
+        
+        skeleton->setPose(pose);
+		freeSkeletonPose(pose);
+    }
+}
+
+void GLWidget::setFrame(int frame)
+{
+    currentFrame = frame;
+    setPoseFromFrame(frame);
+}
+
 
 void GLWidget::renderTimeline()
 {

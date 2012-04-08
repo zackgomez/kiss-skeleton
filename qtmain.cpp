@@ -1,14 +1,13 @@
 #include <QApplication>
 #include <QDesktopWidget>
 
-#include "window.h"
+#include "glwidget.h"
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    Window window;
-    window.resize(window.sizeHint());
-    window.show();
+    GLWidget glwidget;
+    glwidget.show();
     return app.exec();
 }
 
