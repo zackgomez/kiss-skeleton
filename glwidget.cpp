@@ -23,7 +23,10 @@ static void renderArc(const glm::vec3 &start, const glm::vec3 &center,
 static void renderLine(const glm::mat4 &transform,
         const glm::vec3 &p0, const glm::vec3 &p1);
 
-static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &v, bool homo = true);
+static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &v, bool
+        homo = true);
+static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2,
+        const glm::vec2 &pt);
 
 static std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
 static std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
@@ -34,15 +37,23 @@ GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
     timelineHeight(0),
     selectedJoint(NULL),
+    meshMode(SKINNING_MODE),
     editMode(ROTATION_MODE),
     localMode(false),
     rotating(false), translating(false), zooming(false)
 {
     // XXX hardcoded files
+    // Load and initialize skeleton variables
     skeleton = new Skeleton();
     skeleton->readSkeleton("humanoid.bones");
     bindPose = skeleton->currentPose();
     jointNDC.resize(skeleton->getJoints().size());
+
+    const char *meshfile = "fighter_disc.obj";
+    bool skinned = true;
+    rmesh = loadRawMesh(meshfile, skinned);
+    verts = createSkinnedVertArray(rmesh, &nverts);
+    meshMode = skinned ? POSING_MODE : SKINNING_MODE;
 }
 
 GLWidget::~GLWidget()
@@ -64,12 +75,15 @@ void GLWidget::initializeGL()
     GLenum err = glewInit();
     if (err != GLEW_OK)
     {
-        std::cerr << "Unable to initialize GLEW: " << glewGetErrorString(err) << '\n';
+        std::cerr << "Unable to initialize GLEW: "
+            << glewGetErrorString(err) << '\n';
         exit(1);
     }
 
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glEnable(GL_DEPTH_TEST);
+
+    shaderProgram = make_program("meshskin.v.glsl", "meshskin.f.glsl");
 
     arcball = new Arcball(glm::vec3(0, 0, -30), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 }
@@ -78,7 +92,7 @@ void GLWidget::paintGL()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // render
+    // render main view
     glViewport(0, timelineHeight, windowWidth, windowHeight - timelineHeight);
     arcball->setAspect((float) windowWidth / (windowHeight - timelineHeight));
     glMatrixMode(GL_PROJECTION);
@@ -90,10 +104,35 @@ void GLWidget::paintGL()
 
     // render grid
     renderEditGrid();
+
     // Render the joints
     const std::vector<Joint*> joints = skeleton->getJoints();
     for (size_t i = 0; i < joints.size(); i++)
         renderJoint(viewMatrix, joints[i], joints);
+
+    // And the mesh
+    if (meshMode == SKINNING_MODE)
+    {
+        /* TODO
+        glColor3f(1.f, 1.f, 1.f);
+        renderPoints(viewMatrix, rmesh->verts, rmesh->nverts);
+
+        glColor4fv(glm::value_ptr(glm::vec4(selColor, 0.5f)));
+        renderMesh(viewMatrix, verts, nverts);
+
+        if (selectedJoint)
+        {
+            renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
+                    glm::vec4(0,1,0,1));
+        }
+        */
+    }
+    else if (meshMode == POSING_MODE)
+    {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        renderSkinnedMesh(viewMatrix, verts, nverts, glm::vec4(0.7f));
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
 }
 
 void GLWidget::resizeGL(int width, int height)
@@ -411,6 +450,71 @@ void GLWidget::renderRotationSphere(const glm::mat4 &transform, const glm::vec3 
     axisDir[2] = zdir;
 }
 
+void GLWidget::renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+        size_t nverts, const glm::vec4 &color)
+{
+    const std::vector<Joint*> joints = skeleton->getJoints();
+    // First get a list of the necessary transformations
+    std::vector<glm::mat4> jointMats(joints.size());
+    for (size_t i = 0; i < joints.size(); i++)
+    {
+        jointMats[i] = joints[i]->worldTransform * joints[i]->inverseBindTransform;
+
+        // for each transformation try to extract translation and rotation
+        // TODO turn these into dual quats and use to skin using dual quat blending
+        //glm::quat qrot  = glm::quat_cast(jointMats[i]);
+        //glm::vec3 trans = applyMatrix(jointMats[i], glm::vec3(0.f));
+        //std::cout << "(" << i << ") quat: " << qrot << " trans: " << trans << '\n';
+    }
+    // XXX this should be a param
+    glm::mat4 modelMatrix = glm::mat4(1.f);
+
+    // uniforms
+    GLuint projectionUniform  = glGetUniformLocation(shaderProgram->program, "projectionMatrix");
+    GLuint viewUniform        = glGetUniformLocation(shaderProgram->program, "viewMatrix");
+    GLuint modelUniform       = glGetUniformLocation(shaderProgram->program, "modelMatrix");
+    GLuint jointMatrixUniform = glGetUniformLocation(shaderProgram->program, "jointMatrices");
+    GLuint colorUniform       = glGetUniformLocation(shaderProgram->program, "color");
+    // attribs
+    GLuint positionAttrib     = glGetAttribLocation(shaderProgram->program, "position");
+    GLuint jointAttrib        = glGetAttribLocation(shaderProgram->program, "joint");
+    GLuint weightAttrib       = glGetAttribLocation(shaderProgram->program, "weight");
+    GLuint normalAttrib       = glGetAttribLocation(shaderProgram->program, "norm");
+    GLuint coordAttrib        = glGetAttribLocation(shaderProgram->program, "texcoord");
+
+    glUseProgram(shaderProgram->program);
+    glUniformMatrix4fv(projectionUniform, 1, GL_FALSE, glm::value_ptr(getProjectionMatrix()));
+    glUniformMatrix4fv(viewUniform,  1, GL_FALSE, glm::value_ptr(getViewMatrix()));
+    glUniformMatrix4fv(modelUniform,  1, GL_FALSE, glm::value_ptr(modelMatrix));
+    glUniformMatrix4fv(jointMatrixUniform, jointMats.size(), GL_FALSE, &jointMats.front()[0][0]);
+    glUniform4fv(colorUniform, 1, glm::value_ptr(color));
+
+    glEnableVertexAttribArray(positionAttrib);
+    glEnableVertexAttribArray(normalAttrib);
+    glEnableVertexAttribArray(coordAttrib);
+    glEnableVertexAttribArray(jointAttrib);
+    glEnableVertexAttribArray(weightAttrib);
+
+    glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, pos));
+    glVertexAttribPointer(normalAttrib,   3, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, norm));
+    glVertexAttribPointer(coordAttrib,    2, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, coord));
+    glVertexAttribIPointer(jointAttrib,   4, GL_INT,
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, joints));
+    glVertexAttribPointer(weightAttrib,   4, GL_FLOAT,  GL_FALSE,
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, weights));
+
+    glDrawArrays(GL_TRIANGLES, 0, nverts);
+
+    glDisableVertexAttribArray(positionAttrib);
+    glDisableVertexAttribArray(normalAttrib);
+    glDisableVertexAttribArray(coordAttrib);
+    glDisableVertexAttribArray(jointAttrib);
+    glDisableVertexAttribArray(weightAttrib);
+    glUseProgram(0);
+}
 
 glm::mat4 GLWidget::getProjectionMatrix() const
 {
@@ -501,6 +605,21 @@ glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
     pt = mat * pt;
     if (homo) pt /= pt.w;
     return glm::vec3(pt);
+}
+
+float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
+{
+    // from http://local.wasp.uwa.edu.au/~pbourke/geometry/pointline/
+    float l = glm::length(p2 - p1);
+    float u = ((pt.x - p1.x) * (p2.x - p1.x) + (pt.y - p1.y) * (p2.y - p1.y)) / (l*l);
+
+    // if not 'on' then line segment, then inf distance
+    if (u < 0.f || u > 1.f)
+        return HUGE_VAL;
+
+    glm::vec2 intersect = p1 + u * (p2 - p1);
+    
+    return glm::length(pt - intersect);
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)

@@ -17,27 +17,15 @@
 // constants
 static int windowWidth = 800, windowHeight = 1000;
 static int timelineHeight = 200;
-static const int NO_MESH_MODE = 0, SKINNING_MODE = 1, POSING_MODE = 2;
 static const int FPS = 24;
 
-static const glm::vec3 selColor(0.8f, 0.4f, 0.2f);
-
 // global vars
-static Skeleton *skeleton;
 static rawmesh *rmesh;
 static shader  *shader;
 static const char *skelfile, *meshfile;
 static vert_p4t2n3j8 *verts;
 static size_t nverts;
-SkeletonPose *bindPose;
 SkeletonPose *editPose; // the "pose mode" current pose
-static std::vector<glm::vec3> jointNDC;
-static glm::vec3 axisDir[3]; // x,y,z axis directions
-static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
-static glm::vec3 circleNDC;  // circle ndc coordinate
-
-// UI vars
-static int meshMode = NO_MESH_MODE;
 
 // Timeline vars
 static int startFrame = 1;
@@ -91,17 +79,6 @@ static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts, s
 static void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color);
 static void renderTimeline();
-
-static glm::mat4 getViewMatrix();
-static glm::mat4 getProjectionMatrix();
-std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
-std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
-std::ostream& operator<< (std::ostream& os, const glm::vec4 &v);
-std::ostream& operator<< (std::ostream& os, const glm::quat &v);
-
-// quaternion functions
-static glm::quat axisAngleToQuat(const glm::vec4 &axisAngle); // input vec: (axis, angle (deg))
-static glm::vec4 quatToAxisAngle(const glm::quat &q); // output vec (axis, angle (deg))
 
 void redraw(void)
 {
@@ -184,13 +161,6 @@ void mouse(int button, int state, int x, int y)
                 if (currentFrame > endFrame) currentFrame = endFrame;
                 std::cout << "Selected frame " << currentFrame << std::endl;
             }
-        }
-    }
-    // Right mouse selects and deselects bones
-    else if (button == GLUT_RIGHT_BUTTON)
-    {
-        if (state == GLUT_DOWN)
-        {
         }
     }
 
@@ -313,38 +283,13 @@ int main(int argc, char **argv)
     glutMotionFunc(motion);
     glutKeyboardFunc(keyboard);
 
-    GLenum err = glewInit();
-    if (err != GLEW_OK)
-    {
-        std::cerr << "Unable to initialize GLEW: " << glewGetErrorString(err) << '\n';
-        exit(1);
-    }
-
     glEnable(GL_DEPTH_TEST);
 
     // --------------------
     // START MY SETUP
     // --------------------
 
-    shader = make_program("meshskin.v.glsl", "meshskin.f.glsl");
-
-    arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
-
-    skeleton = new Skeleton();
-    skeleton->readSkeleton(skelfile);
-    bindPose = currentPose();
     editPose = currentPose();
-
-    jointNDC = std::vector<glm::vec3>(skeleton->getJoints().size());
-
-    rmesh = NULL;
-    if (meshfile)
-    {
-		bool skinned = true;
-        rmesh = loadRawMesh(meshfile, skinned);
-        verts = createSkinnedVertArray(rmesh, &nverts);
-        meshMode = skinned ? POSING_MODE : SKINNING_MODE;
-    }
 
     // --------------------
     // END MY SETUP
@@ -352,17 +297,6 @@ int main(int argc, char **argv)
 
     glutMainLoop();
     return 0;             /* ANSI C requires main to return int. */
-}
-
-glm::vec2 clickToScreenPos(int x, int y)
-{
-    glm::vec2 screencoord((float)x / windowWidth, (float)y / (windowHeight - timelineHeight));
-    screencoord -= glm::vec2(0.5f);
-    screencoord *= 2.f;
-    screencoord.y = -screencoord.y;
-
-    //std::cout << "in: " << x << ' ' << y << "  coord: " << screencoord << '\n';
-    return screencoord;
 }
 
 void autoSkinMesh()
@@ -428,26 +362,6 @@ void autoSkinMesh()
             if (weights[4*i + j] != 0.f)
                 weights[4*i + j] = 1 - (weights[4*i + j] / sum);
     }
-}
-
-SkeletonPose* currentPose()
-{
-    const std::vector<Joint*> joints = skeleton->getJoints();
-
-    SkeletonPose *pose = new SkeletonPose();
-    pose->poses = std::vector<JointPose*>(joints.size());
-
-    for (size_t i = 0; i < joints.size(); i++)
-    {
-        JointPose *p = new JointPose();
-        const Joint *j = joints[i];
-        p->pos = j->pos;
-        p->rot = j->rot;
-        p->scale = j->scale;
-        pose->poses[i] = p;
-    }
-
-    return pose;
 }
 
 void writeSkeleton(const char *filename)
@@ -667,21 +581,6 @@ void setScaleVec(const glm::vec2 &clickPos)
     std::cout << "Scale drag.\n";
 }
 
-float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
-{
-    // from http://local.wasp.uwa.edu.au/~pbourke/geometry/pointline/
-    float l = glm::length(p2 - p1);
-    float u = ((pt.x - p1.x) * (p2.x - p1.x) + (pt.y - p1.y) * (p2.y - p1.y)) / (l*l);
-
-    // if not 'on' then line segment, then inf distance
-    if (u < 0.f || u > 1.f)
-        return HUGE_VAL;
-
-    glm::vec2 intersect = p1 + u * (p2 - p1);
-    
-    return glm::length(pt - intersect);
-}
-
 void setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 {
     if (dragPos == glm::vec2(HUGE_VAL))
@@ -792,72 +691,6 @@ void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
     glDrawArrays(GL_TRIANGLES, 0, nverts);
     glDisableClientState(GL_VERTEX_ARRAY);
 }
-
-void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
-        size_t nverts, const glm::vec4 &color)
-{
-    const std::vector<Joint*> joints = skeleton->getJoints();
-    // First get a list of the necessary transformations
-    std::vector<glm::mat4> jointMats(joints.size());
-    for (size_t i = 0; i < joints.size(); i++)
-    {
-        jointMats[i] = joints[i]->worldTransform * joints[i]->inverseBindTransform;
-
-        // for each transformation try to extract translation and rotation
-        // TODO turn these into dual quats and use to skin using dual quat blending
-        //glm::quat qrot  = glm::quat_cast(jointMats[i]);
-        //glm::vec3 trans = applyMatrix(jointMats[i], glm::vec3(0.f));
-        //std::cout << "(" << i << ") quat: " << qrot << " trans: " << trans << '\n';
-    }
-    glm::mat4 modelMatrix = glm::inverse(getViewMatrix()) * transform;
-
-    // uniforms
-    GLuint projectionUniform  = glGetUniformLocation(shader->program, "projectionMatrix");
-    GLuint viewUniform        = glGetUniformLocation(shader->program, "viewMatrix");
-    GLuint modelUniform       = glGetUniformLocation(shader->program, "modelMatrix");
-    GLuint jointMatrixUniform = glGetUniformLocation(shader->program, "jointMatrices");
-    GLuint colorUniform       = glGetUniformLocation(shader->program, "color");
-    // attribs
-    GLuint positionAttrib     = glGetAttribLocation(shader->program, "position");
-    GLuint jointAttrib        = glGetAttribLocation(shader->program, "joint");
-    GLuint weightAttrib       = glGetAttribLocation(shader->program, "weight");
-    GLuint normalAttrib       = glGetAttribLocation(shader->program, "norm");
-    GLuint coordAttrib        = glGetAttribLocation(shader->program, "texcoord");
-
-    glUseProgram(shader->program);
-    glUniformMatrix4fv(projectionUniform, 1, GL_FALSE, glm::value_ptr(getProjectionMatrix()));
-    glUniformMatrix4fv(viewUniform,  1, GL_FALSE, glm::value_ptr(getViewMatrix()));
-    glUniformMatrix4fv(modelUniform,  1, GL_FALSE, glm::value_ptr(modelMatrix));
-    glUniformMatrix4fv(jointMatrixUniform, jointMats.size(), GL_FALSE, &jointMats.front()[0][0]);
-    glUniform4fv(colorUniform, 1, glm::value_ptr(color));
-
-    glEnableVertexAttribArray(positionAttrib);
-    glEnableVertexAttribArray(normalAttrib);
-    glEnableVertexAttribArray(coordAttrib);
-    glEnableVertexAttribArray(jointAttrib);
-    glEnableVertexAttribArray(weightAttrib);
-
-    glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
-            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, pos));
-    glVertexAttribPointer(normalAttrib,   3, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, norm));
-    glVertexAttribPointer(coordAttrib,    2, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, coord));
-    glVertexAttribIPointer(jointAttrib,   4, GL_INT,
-            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, joints));
-    glVertexAttribPointer(weightAttrib,   4, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, weights));
-
-    glDrawArrays(GL_TRIANGLES, 0, nverts);
-
-    glDisableVertexAttribArray(positionAttrib);
-    glDisableVertexAttribArray(normalAttrib);
-    glDisableVertexAttribArray(coordAttrib);
-    glDisableVertexAttribArray(jointAttrib);
-    glDisableVertexAttribArray(weightAttrib);
-    glUseProgram(0);
-}
-
 void renderTimeline()
 {
     // Render in NDC coordinates, no projection matrix needed
