@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "zgfx.h"
 
 const unsigned Skeleton::ROOT_PARENT = 255;
 

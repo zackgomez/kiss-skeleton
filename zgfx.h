@@ -63,7 +63,6 @@ vert_p4t2n3* createVertArray(const rawmesh *mesh, size_t *nverts);
 vert_p4t2n3j8* createSkinnedVertArray(const rawmesh *mesh, size_t *nverts);
 
 
-
 // shader support
 struct shader
 {

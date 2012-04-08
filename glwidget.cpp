@@ -33,6 +33,7 @@ static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &v, bool
 static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2,
         const glm::vec2 &pt);
 
+static void autoSkinMesh(rawmesh *rmesh, const Skeleton *skeleton);
 static glm::quat axisAngleToQuat(const glm::vec4 &a);
 static glm::vec4 quatToAxisAngle(const glm::quat &q);
 static std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
@@ -980,6 +981,71 @@ float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &p
     glm::vec2 intersect = p1 + u * (p2 - p1);
     
     return glm::length(pt - intersect);
+}
+
+void autoSkinMesh(rawmesh *rmesh, const Skeleton *skeleton)
+{
+    // TODO update this to use a better algorithm
+    // Requires a mesh with skinning data
+    assert(rmesh && rmesh->joints && rmesh->weights);
+
+    // First get all the joint world positions for easy access
+    std::vector<glm::vec3> jointPos;
+    {
+        const std::vector<Joint*> joints = skeleton->getJoints();
+        jointPos = std::vector<glm::vec3>(joints.size());
+        for (size_t i = 0; i < joints.size(); i++)
+            jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
+    }
+
+    // For each vertex, find the closest 2 joints and set weights according
+    // to distance
+    std::vector<float> dists;
+    vert  *verts   = rmesh->verts;
+    int   *joints  = rmesh->joints;
+    float *weights = rmesh->weights;
+    for (size_t i = 0; i < rmesh->nverts; i++)
+    {
+        dists.assign(jointPos.size(), HUGE_VAL);
+        for (size_t j = 0; j < dists.size(); j++)
+        {
+            glm::vec3 v = glm::make_vec3(verts[i].pos);
+            dists[j] = glm::length(jointPos[j] - v);
+        }
+
+        // only take best two
+        for (size_t j = 0; j < 2; j++)
+        {
+            // Find best joint/dist pair
+            float best = HUGE_VAL;
+            int bestk = -1;
+            for (size_t k = 0; k < dists.size(); k++)
+            {
+                if (dists[k] < best)
+                {
+                    best = dists[k];
+                    bestk = k;
+                }
+            }
+
+            joints[4*i + j]  = bestk;
+            weights[4*i + j] = best;
+            dists[bestk] = HUGE_VAL;
+        }
+        // Set the rest to 0
+        joints[4*i + 2] = 0;
+        joints[4*i + 3] = 0;
+        weights[4*i + 2] = 0.f;
+        weights[4*i + 3] = 0.f;
+
+        // normalize weights
+        float sum = 0.f;
+        for (size_t j = 0; j < 4; j++)
+            sum += weights[4*i + j];
+        for (size_t j = 0; j < 4; j++)
+            if (weights[4*i + j] != 0.f)
+                weights[4*i + j] = 1 - (weights[4*i + j] / sum);
+    }
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
