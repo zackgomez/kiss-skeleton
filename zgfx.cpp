@@ -291,9 +291,11 @@ vert_p4t2n3j8 * createSkinnedVertArray(const rawmesh *mesh, size_t *nverts)
         for (size_t j = 0; j < 3; j++)
         {
             size_t v = ff.fverts[j].v;
+            size_t vn = ff.fverts[j].vn;
+            size_t vt = ff.fverts[j].vt;
             ret[vi].pos   = glm::make_vec4(mesh->verts[v].pos);
-            ret[vi].norm  = mesh->norms[ff.fverts[j].vn];
-            ret[vi].coord = mesh->coords[ff.fverts[j].vt];
+            ret[vi].norm  = mesh->norms[vn];
+            ret[vi].coord = mesh->coords[vt];
             for (size_t k = 0; k < 4; k++)
             {
                 ret[vi].joints[k] = mesh->joints[4*v + k];

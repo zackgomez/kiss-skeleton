@@ -108,6 +108,7 @@ static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int 
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts, size_t nverts);
 static void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color);
+static void renderEditGrid();
 static void renderTimeline();
 
 static glm::mat4 getViewMatrix();
@@ -139,6 +140,8 @@ void redraw(void)
 
     // Render main window
     glViewport(0, timelineHeight, windowWidth, windowHeight - timelineHeight);
+
+    renderEditGrid();
 
     // Render the joints
     const std::vector<Joint*> joints = skeleton->getJoints();
@@ -649,9 +652,9 @@ void setPoseFromFrame(int frame)
             glm::vec3 endPos = next->poses[i]->pos;
             jp->pos = startPos + (endPos - startPos) * anim;
 
-            glm::vec4 startRot = last->poses[i]->rot;
-            glm::vec4 endRot = next->poses[i]->rot;
-            jp->rot = startRot + (endRot - startRot) * anim;
+            glm::quat startRot = axisAngleToQuat(last->poses[i]->rot);
+            glm::quat endRot = axisAngleToQuat(next->poses[i]->rot);
+            jp->rot = quatToAxisAngle(glm::normalize((1.f - anim) * startRot + anim * endRot));
 
             float startScale = last->poses[i]->scale;
             float endScale = next->poses[i]->scale;
@@ -1195,7 +1198,7 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
     GLuint positionAttrib     = glGetAttribLocation(shader->program, "position");
     GLuint jointAttrib        = glGetAttribLocation(shader->program, "joint");
     GLuint weightAttrib       = glGetAttribLocation(shader->program, "weight");
-    GLuint normalAttrib       = glGetAttribLocation(shader->program, "normal");
+    GLuint normalAttrib       = glGetAttribLocation(shader->program, "norm");
     GLuint coordAttrib        = glGetAttribLocation(shader->program, "texcoord");
 
     glUseProgram(shader->program);
@@ -1211,14 +1214,13 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
     glEnableVertexAttribArray(jointAttrib);
     glEnableVertexAttribArray(weightAttrib);
 
-    /*
     for (size_t i = 0; i < 30; i++)
     {
-        for (size_t j = 0; j < 4; j++)
-            printf("%d %f, ", verts[i].joints[j], verts[i].weights[j]);
-        printf("\n");
+        int face = i / 3;
+        int vert = i % 3;
+        std::cout << verts[i].norm << " VS " << rmesh->norms[rmesh->ffaces[face].fverts[vert].vn]
+            << '\n';
     }
-    */
 
     glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
             sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, pos));
@@ -1226,7 +1228,7 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
             sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, norm));
     glVertexAttribPointer(coordAttrib,    2, GL_FLOAT,  GL_FALSE,
             sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, coord));
-    glVertexAttribIPointer(jointAttrib,    4, GL_INT,
+    glVertexAttribIPointer(jointAttrib,   4, GL_INT,
             sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, joints));
     glVertexAttribPointer(weightAttrib,   4, GL_FLOAT,  GL_FALSE,
             sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, weights));
@@ -1290,6 +1292,27 @@ void renderTimeline()
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
+}
+
+void renderEditGrid()
+{
+    glLoadMatrixf(glm::value_ptr(getViewMatrix()));
+    const int width = 16;
+
+    glBegin(GL_LINES);
+    for (int i = -width/2; i <= width/2; i++)
+    {
+        glColor3f(0.2f, 0.2f, 0.2f);
+        // in zdirection
+        if (i == 0) glColor3f(0.4f, 0.f, 0.f);
+        glVertex3f(i, 0.f, -width/2);
+        glVertex3f(i, 0.f, width/2);
+        if (i == 0) glColor3f(0.f, 0.4f, 0.f);
+        // in xdirection
+        glVertex3f(-width/2, 0.f, i);
+        glVertex3f(width/2, 0.f, i);
+    }
+    glEnd();
 }
 
 std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)

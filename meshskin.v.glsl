@@ -1,7 +1,7 @@
 #version 150
 
 attribute vec4 position;
-attribute vec3 normal;
+attribute vec3 norm;
 attribute vec2 texcoord;
 attribute ivec4 joint;
 attribute vec4 weight;
@@ -31,7 +31,7 @@ void main()
 
     frag_pos = vertMat * position;
     frag_texcoord = texcoord;
-    frag_norm = normalMat * normal;
+    frag_norm = norm;
 
     gl_Position = projectionMatrix * viewMatrix * frag_pos;
 }
