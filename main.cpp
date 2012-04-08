@@ -458,9 +458,10 @@ int main(int argc, char **argv)
     rmesh = NULL;
     if (meshfile)
     {
-        rmesh = loadRawMesh(meshfile, true /* skinning data */);
+		bool skinned = true;
+        rmesh = loadRawMesh(meshfile, skinned);
         verts = createSkinnedVertArray(rmesh, &nverts);
-        meshMode = SKINNING_MODE;
+        meshMode = skinned ? POSING_MODE : SKINNING_MODE;
     }
 
     // --------------------

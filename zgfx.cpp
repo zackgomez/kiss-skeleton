@@ -14,7 +14,7 @@ static void show_info_log( GLuint object, PFNGLGETSHADERIVPROC glGet__iv,
         PFNGLGETSHADERINFOLOGPROC glGet__InfoLog);
 static void *file_contents(const char *filename, GLint *length);
 
-rawmesh* loadRawMesh(const char *filename, bool skinned)
+rawmesh* loadRawMesh(const char *filename, bool &skinned)
 {
     FILE *f = fopen(filename, "r");
     if (!f)
@@ -155,6 +155,8 @@ rawmesh* loadRawMesh(const char *filename, bool skinned)
     rmesh->nnorms  = nnorms;
     rmesh->ncoords = ncoords;
 
+	// if the file contained skinning data, let them know
+	skinned = extended;
     return rmesh;
 }
 
