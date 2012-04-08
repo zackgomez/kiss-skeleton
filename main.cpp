@@ -16,7 +16,7 @@
 #include "zgfx.h"
 
 // constants
-static int windowWidth = 800, windowHeight = 600;
+static int windowWidth = 800, windowHeight = 1000;
 static int timelineHeight = 200;
 static const float arcballRadius = 10.f;
 static const float zoomSpeed = 2.f;
@@ -413,6 +413,7 @@ int main(int argc, char **argv)
 
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
+	glutInitWindowSize(windowWidth, windowHeight);
 
     glutCreateWindow("kiss_particle demo");
     glutDisplayFunc(redraw);
