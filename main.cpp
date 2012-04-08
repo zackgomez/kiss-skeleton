@@ -227,7 +227,7 @@ void mouse(int button, int state, int x, int y)
             {
                 setFrame(startFrame + (x * (endFrame - startFrame + 1) + windowWidth * 0.5f) / windowWidth - 1);
                 if (currentFrame > endFrame) currentFrame = endFrame;
-                std::cout << currentFrame << std::endl;
+                std::cout << "Selected frame " << currentFrame << std::endl;
             }
         }
     }
@@ -614,14 +614,48 @@ void setPoseFromFrame(int frame)
     if (keyframes.count(frame) > 0)
     {
         skeleton->setPose(keyframes[frame]);
+    } 
+    else if (keyframes.size() > 0)
+    {
+        int lastKeyframe = currentFrame;
+        int nextKeyframe = currentFrame;
+        while (keyframes.count(lastKeyframe) == 0 && lastKeyframe > startFrame)
+            lastKeyframe--;
+        while (keyframes.count(nextKeyframe) == 0 && nextKeyframe < endFrame)
+            nextKeyframe++;
+        if (keyframes.count(lastKeyframe) == 0)
+            lastKeyframe = nextKeyframe;
+        if (keyframes.count(nextKeyframe) == 0)
+            nextKeyframe = lastKeyframe;
+        
+        // The normalized position of the current frame between the keyframes
+        float anim = 0.f;
+        if (nextKeyframe - lastKeyframe > 0)
+            anim = float(currentFrame - lastKeyframe) / (nextKeyframe - lastKeyframe);
+
+        SkeletonPose* pose = keyframes[lastKeyframe];
+        for (int i = 0; i < pose->poses.size(); i++)
+        {
+            glm::vec3 startPos = keyframes[lastKeyframe]->poses.at(i)->pos;
+            glm::vec3 endPos = keyframes[nextKeyframe]->poses.at(i)->pos;
+            pose->poses.at(i)->pos = startPos + (endPos - startPos) * anim;
+            glm::vec4 startRot = keyframes[lastKeyframe]->poses.at(i)->rot;
+            glm::vec4 endRot = keyframes[nextKeyframe]->poses.at(i)->rot;
+            pose->poses.at(i)->rot = startRot + (endRot - startRot) * anim;
+            float startScale = keyframes[lastKeyframe]->poses.at(i)->scale;
+            float endScale = keyframes[nextKeyframe]->poses.at(i)->scale;
+            pose->poses.at(i)->scale = startScale + (endScale - startScale) * anim;
+        }
+        
+        skeleton->setPose(pose);
     }
 }
 
 void setFrame(int frame)
 {
     currentFrame = frame;
-    glutPostRedisplay();
     setPoseFromFrame(frame);
+    glutPostRedisplay();
 }
 
 void setTranslationVec(const glm::vec2 &clickPos)
