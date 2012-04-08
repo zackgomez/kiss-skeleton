@@ -11,15 +11,12 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include "arcball.h"
 #include "kiss-skeleton.h"
 #include "zgfx.h"
 
 // constants
 static int windowWidth = 800, windowHeight = 1000;
 static int timelineHeight = 200;
-static const float arcballRadius = 10.f;
-static const float zoomSpeed = 2.f;
 static const float selectThresh = 0.02f;
 static const float axisLength = 0.10f; // ndc
 static const float circleRadius = 0.12f; //ndc
@@ -32,7 +29,6 @@ static const glm::vec3 selColor(0.8f, 0.4f, 0.2f);
 
 // global vars
 static Skeleton *skeleton;
-static Arcball *arcball;
 static rawmesh *rmesh;
 static shader  *shader;
 static const char *skelfile, *meshfile;
@@ -96,7 +92,6 @@ static void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
 static void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
 static void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
 
-static void renderCube();
 static void renderJoint(const glm::mat4 &viewTransform, const Joint* joint, const std::vector<Joint*> joints);
 static void renderAxes(const glm::mat4 &viewTransform, const glm::vec3 &worldCoord);
 static void renderLine(const glm::vec4 &transform, const glm::vec3 &p0, const glm::vec3 &p1);
@@ -109,7 +104,6 @@ static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int 
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts, size_t nverts);
 static void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color);
-static void renderEditGrid();
 static void renderTimeline();
 
 static glm::mat4 getViewMatrix();
@@ -125,24 +119,8 @@ static glm::vec4 quatToAxisAngle(const glm::quat &q); // output vec (axis, angle
 
 void redraw(void)
 {
-    // Now render
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    glMatrixMode(GL_PROJECTION);
-    glm::mat4 projMatrix = arcball->getProjectionMatrix();
-    glLoadMatrixf(glm::value_ptr(projMatrix));
-
-    glMatrixMode(GL_MODELVIEW);
-    glm::mat4 viewMatrix = arcball->getViewMatrix();
-    glLoadMatrixf(glm::value_ptr(viewMatrix));
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
     // Render main window
     glViewport(0, timelineHeight, windowWidth, windowHeight - timelineHeight);
-
-    renderEditGrid();
 
     // Render the joints
     const std::vector<Joint*> joints = skeleton->getJoints();
@@ -257,38 +235,6 @@ void mouse(int button, int state, int x, int y)
             }
         }
     }
-    // Middle button rotates camera
-    else if (button == GLUT_MIDDLE_BUTTON)
-    {
-        if (state == GLUT_DOWN)
-        {
-            if (glutGetModifiers() & GLUT_ACTIVE_CTRL)
-            {
-                dragStart = clickToScreenPos(x, y);
-                zoomStart = arcball->getZoom();
-                zooming = true;
-            }
-            else if (glutGetModifiers() & GLUT_ACTIVE_SHIFT)
-            {
-                dragStart = clickToScreenPos(x, y);
-				arcball->start(glm::vec3(dragStart, 0.f));
-                translating = true;
-            }
-            else if (!glutGetModifiers())
-            {
-                glm::vec2 screenPos = clickToScreenPos(x, y);
-                glm::vec3 ndc(screenPos, 0.f);
-                arcball->start(ndc);
-                rotating = true;
-            }
-        }
-        else
-        {
-            rotating = false;
-            zooming = false;
-            translating = false;
-        }
-    }
     // Mouse wheel (buttons 3 and 4) zooms in an out (translates camera)
     else if (button == 3 || button == 4)
     {
@@ -314,12 +260,6 @@ void motion(int x, int y)
             setJointScale(selectedJoint, screenpos);
         else
             assert(false && "Unknown edit mode");
-    }
-    else if (rotating)
-    {
-        glm::vec3 ndc(clickToScreenPos(x, y), 0.f);
-        if (ndc != glm::vec3(HUGE_VAL, HUGE_VAL, 0.f))
-            arcball->move(ndc);
     }
     else if (zooming)
     {
@@ -879,24 +819,6 @@ void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
     skeleton->setPose(selectedJoint->index, &pose);
 }
 
-static GLfloat cube_verts[] = {
-    1,1,1,    -1,1,1,   -1,-1,1,  1,-1,1,        // v0-v1-v2-v3
-    1,1,1,    1,-1,1,   1,-1,-1,  1,1,-1,        // v0-v3-v4-v5
-    1,1,1,    1,1,-1,   -1,1,-1,  -1,1,1,        // v0-v5-v6-v1
-    -1,1,1,   -1,1,-1,  -1,-1,-1, -1,-1,1,    // v1-v6-v7-v2
-    -1,-1,-1, 1,-1,-1,  1,-1,1,   -1,-1,1,    // v7-v4-v3-v2
-    1,-1,-1,  -1,-1,-1, -1,1,-1,  1,1,-1};   // v4-v7-v6-v5
-
-static void renderCube()
-{
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glVertexPointer(3, GL_FLOAT, 0, cube_verts);
-
-    glDrawArrays(GL_QUADS, 0, 24);
-
-    glDisableClientState(GL_VERTEX_ARRAY);
-}
-
 void renderJoint(const glm::mat4 &transform, const Joint* joint,
         const std::vector<Joint*> joints)
 {
@@ -955,16 +877,6 @@ void renderJoint(const glm::mat4 &transform, const Joint* joint,
     glColor3f(0, 1, 0);
     glVertex4fv(&end.x);
     glEnd();
-}
-
-glm::mat4 getProjectionMatrix()
-{
-    return arcball->getProjectionMatrix();
-}
-
-glm::mat4 getViewMatrix()
-{
-    return arcball->getViewMatrix();
 }
 
 void renderLine(const glm::mat4 &transform, const glm::vec3 &p0, const glm::vec3 &p1)
@@ -1300,83 +1212,4 @@ void renderTimeline()
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
 }
-
-void renderEditGrid()
-{
-    glLoadMatrixf(glm::value_ptr(getViewMatrix()));
-    const int width = 16;
-
-    glBegin(GL_LINES);
-    for (int i = -width/2; i <= width/2; i++)
-    {
-        glColor3f(0.2f, 0.2f, 0.2f);
-        // in zdirection
-        if (i == 0) glColor3f(0.4f, 0.f, 0.f);
-        glVertex3f(i, 0.f, -width/2);
-        glVertex3f(i, 0.f, width/2);
-        if (i == 0) glColor3f(0.f, 0.4f, 0.f);
-        // in xdirection
-        glVertex3f(-width/2, 0.f, i);
-        glVertex3f(width/2, 0.f, i);
-    }
-    glEnd();
-}
-
-std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
-{
-    os << v.x << ' ' << v.y;
-    return os;
-}
-
-std::ostream& operator<< (std::ostream& os, const glm::vec3 &v)
-{
-    os << v.x << ' ' << v.y << ' ' << v.z;
-    return os;
-}
-
-std::ostream& operator<< (std::ostream& os, const glm::vec4 &v)
-{
-    os << v.x << ' ' << v.y << ' ' << v.z << ' ' << v.w;
-    return os;
-}
-
-std::ostream& operator<< (std::ostream& os, const glm::quat &v)
-{
-    os << v.x << ' ' << v.y << ' ' << v.z << ' ' << v.w;
-    return os;
-}
-
-// Quaternion operations follow...
-glm::quat axisAngleToQuat(const glm::vec4 &a)
-{
-    /* 
-     * qx = ax * sin(angle/2)
-     * qy = ay * sin(angle/2)
-     * qz = az * sin(angle/2)
-     * qw = cos(angle/2)
-     */
-
-    float angle = M_PI/180.f * a.w;
-    float sina = sinf(angle/2.f);
-    float cosa = cosf(angle/2.f);
-
-    // CAREFUL: w, x, y, z
-    return glm::quat(cosa, a.x * sina, a.y * sina, a.z * sina);
-}
-
-glm::vec4 quatToAxisAngle(const glm::quat &q)
-{
-    float angle = 2.f * acosf(q.w);
-    float sina2 = sinf(angle/2.f);
-    angle *= 180.f/M_PI;
-
-    if (sina2 == 0.f)
-        return glm::vec4(0, 0, 1, angle);
-
-    return glm::vec4(
-            q.x / sina2,
-            q.y / sina2,
-            q.z / sina2,
-            angle);
-};
 
