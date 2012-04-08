@@ -2,6 +2,8 @@
 #include <GL/glew.h>
 #include <QGLWidget>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <map>
 #include "Arcball.h"
 #include "zgfx.h"
 
@@ -24,12 +26,14 @@ protected:
     void initializeGL();
     void paintGL();
     void resizeGL(int width, int height);
+    void keyPressEvent(QKeyEvent *e);
     void mousePressEvent(QMouseEvent *event);
     void mouseReleaseEvent(QMouseEvent *event);
     void mouseMoveEvent(QMouseEvent *event);
     void wheelEvent(QWheelEvent *event);
 
 private:
+    // Data members
     Arcball *arcball;
     Skeleton *skeleton;
     shader *shaderProgram;
@@ -43,15 +47,37 @@ private:
     int meshMode, editMode;
     bool localMode;
 
+    // graphics -> UI vars
     std::vector<glm::vec3> jointNDC;
     glm::vec3 axisNDC[3];
     glm::vec3 axisDir[3];
     glm::vec3 circleNDC;
 
+    // UI state vars
+    bool dragging;
     bool rotating, translating, zooming;
     glm::vec2 dragStart;
     float zoomStart;
+    glm::vec3 translationVec, rotationVec;
+    glm::vec3 startingPos;
+    glm::quat startingRot;
+    float startingScale;
 
+    // Timeline vars
+    int startFrame, endFrame, currentFrame;
+    std::map<int, SkeletonPose*> keyframes;
+    bool play;
+
+    // Skeleton editing functions
+    void setTranslationVec(const glm::vec2 &clickPos);
+    void setRotationVec(const glm::vec2 &clickPos);
+    void setScaleVec(const glm::vec2 &clickPos);
+    void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
+    void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
+    void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
+
+    // Rendering helpers
+    void renderTimeline();
     void renderEditGrid() const;
     void renderJoint(const glm::mat4 &transform, const Joint *joint,
             const std::vector<Joint*> joints);
@@ -65,6 +91,7 @@ private:
     glm::mat4 getViewMatrix() const;
     glm::vec2 clickToScreenPos(int x, int y) const;
 
+    // Constants
     static const float ZOOM_SPEED;
     static const float WHEEL_ZOOM_SPEED;
     static const glm::vec3 ACTIVE_COLOR;

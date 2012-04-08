@@ -11,14 +11,15 @@ Window::Window()
     mainLayout->addWidget(glWidget);
     setLayout(mainLayout);
 
+    glWidget->setFocus(Qt::OtherFocusReason);
+    glWidget->setWindowFlags(Qt::FramelessWindowHint);
+    setWindowFlags(Qt::FramelessWindowHint);
+
     setWindowTitle(tr("kiss-skeleton"));
 }
 
 void Window::keyPressEvent(QKeyEvent *e)
 {
-    if (e->key() == Qt::Key_Escape)
-        close();
-    else
-        QWidget::keyPressEvent(e);
+    QWidget::keyPressEvent(e);
 }
 

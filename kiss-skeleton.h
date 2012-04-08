@@ -64,3 +64,5 @@ private:
 
 
 void freeSkeletonPose(SkeletonPose *sp);
+void writeSkeleton(const char *filename, const Skeleton *skeleton,
+        const SkeletonPose *bindPose);

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include <cstdio>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -166,5 +167,31 @@ void freeSkeletonPose(SkeletonPose *sp)
 {
     for (size_t i = 0; i < sp->poses.size(); i++)
         delete sp->poses[i];
+}
+
+void writeSkeleton(const char *filename, const Skeleton *skeleton,
+        const SkeletonPose *bindPose)
+{
+    FILE *f = fopen(filename, "w");
+    if (!f)
+    {
+        fprintf(stderr, "Unable to open %s for writing.\n", filename);
+        return;
+    }
+
+    const std::vector<JointPose*> poses = bindPose->poses;
+    for (size_t i = 0; i < poses.size(); i++)
+    {
+        const Joint *j = skeleton->getJoint(i);
+        const JointPose *p = poses[i];
+        // format is:
+        // name(s) pos(3f) rot(4f) scale(1f) parent(1i)
+        fprintf(f, "%s   %f %f %f   %f %f %f %f   %f %d\n",
+                j->name.c_str(), p->pos[0], p->pos[1], p->pos[2],
+                p->rot[0], p->rot[1], p->rot[2], p->rot[3],
+                p->scale, j->parent);
+    }
+
+    fclose(f);
 }
 
