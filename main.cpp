@@ -394,7 +394,8 @@ void keyboard(GLubyte key, GLint x, GLint y)
     }
     if (key == 'l' && meshMode == POSING_MODE)
     {
-       keyframes.erase(currentFrame); 
+		// TODO delete keyframe (using freeSkeletonPose)
+        keyframes.erase(currentFrame); 
     }
     if (key == ' ' && meshMode == POSING_MODE)
     {
@@ -615,7 +616,7 @@ void setPoseFromFrame(int frame)
     {
         skeleton->setPose(keyframes[frame]);
     } 
-    else if (keyframes.size() > 0)
+    else if (keyframes.size() > 1)
     {
         int lastKeyframe = currentFrame;
         int nextKeyframe = currentFrame;
@@ -633,21 +634,31 @@ void setPoseFromFrame(int frame)
         if (nextKeyframe - lastKeyframe > 0)
             anim = float(currentFrame - lastKeyframe) / (nextKeyframe - lastKeyframe);
 
-        SkeletonPose* pose = keyframes[lastKeyframe];
+		assert(keyframes.count(lastKeyframe) && keyframes.count(nextKeyframe));
+		const SkeletonPose *last = keyframes[lastKeyframe];
+		const SkeletonPose *next = keyframes[nextKeyframe];
+		assert(last->poses.size() == next->poses.size());
+
+		SkeletonPose* pose = new SkeletonPose;
+		pose->poses.resize(last->poses.size());
         for (int i = 0; i < pose->poses.size(); i++)
         {
-            glm::vec3 startPos = keyframes[lastKeyframe]->poses.at(i)->pos;
-            glm::vec3 endPos = keyframes[nextKeyframe]->poses.at(i)->pos;
-            pose->poses.at(i)->pos = startPos + (endPos - startPos) * anim;
-            glm::vec4 startRot = keyframes[lastKeyframe]->poses.at(i)->rot;
-            glm::vec4 endRot = keyframes[nextKeyframe]->poses.at(i)->rot;
-            pose->poses.at(i)->rot = startRot + (endRot - startRot) * anim;
-            float startScale = keyframes[lastKeyframe]->poses.at(i)->scale;
-            float endScale = keyframes[nextKeyframe]->poses.at(i)->scale;
-            pose->poses.at(i)->scale = startScale + (endScale - startScale) * anim;
+			JointPose *jp = pose->poses[i] = new JointPose;
+            glm::vec3 startPos = last->poses[i]->pos;
+            glm::vec3 endPos = next->poses[i]->pos;
+            jp->pos = startPos + (endPos - startPos) * anim;
+
+            glm::vec4 startRot = last->poses[i]->rot;
+            glm::vec4 endRot = next->poses[i]->rot;
+            jp->rot = startRot + (endRot - startRot) * anim;
+
+            float startScale = last->poses[i]->scale;
+            float endScale = next->poses[i]->scale;
+            jp->scale = startScale + (endScale - startScale) * anim;
         }
         
         skeleton->setPose(pose);
+		freeSkeletonPose(pose);
     }
 }
 
