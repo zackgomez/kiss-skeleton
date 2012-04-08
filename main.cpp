@@ -55,6 +55,7 @@ static bool zooming  = false;
 static bool translating = false;
 static int meshMode = NO_MESH_MODE;
 static int editMode = TRANSLATION_MODE;
+static bool localMode = false;
 
 // Timeline vars
 static int startFrame = 1;
@@ -707,6 +708,8 @@ void setTranslationVec(const glm::vec2 &clickPos)
 
     // If they choose an axis translation vector, we need to make sure that it's in the
     // correct (parent) space
+    if (localMode)
+        translationVec = applyMatrix(selectedJoint->worldTransform, translationVec, false);
     glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ?
         glm::mat4(1.f) : skeleton->getJoint(selectedJoint->parent)->worldTransform;
     translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
@@ -762,7 +765,10 @@ void setRotationVec(const glm::vec2 &clickPos)
     // Transform the rotation vector into parent space so that the transformation
     // is around the global axes
     glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(selectedJoint->parent)->worldTransform;
-    rotationVec = applyMatrix(glm::inverse(parentTransform), globalVec, false);
+    rotationVec = globalVec;
+    if (localMode)
+        rotationVec = applyMatrix(selectedJoint->worldTransform, rotationVec, false);
+    rotationVec = applyMatrix(glm::inverse(parentTransform), rotationVec, false);
     // Save startign rotation as quat
     startingRot = axisAngleToQuat(selectedJoint->rot);
 
@@ -979,9 +985,13 @@ void renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
     // ndc coord of axis center
     glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
 
-    glm::vec3 xdir = applyMatrix(getProjectionMatrix() * transform, glm::vec3(1,0,0), false);
-    glm::vec3 ydir = applyMatrix(getProjectionMatrix() * transform, glm::vec3(0,1,0), false);
-    glm::vec3 zdir = applyMatrix(getProjectionMatrix() * transform, glm::vec3(0,0,1), false);
+    glm::mat4 axisTransform = getProjectionMatrix() * transform;
+    if (localMode)
+        axisTransform = axisTransform * selectedJoint->worldTransform;
+
+    glm::vec3 xdir = applyMatrix(axisTransform, glm::vec3(1,0,0), false);
+    glm::vec3 ydir = applyMatrix(axisTransform, glm::vec3(0,1,0), false);
+    glm::vec3 zdir = applyMatrix(axisTransform, glm::vec3(0,0,1), false);
     glm::vec3 p0   = glm::vec3(ndcCoord.x, ndcCoord.y, 0.f);
     glm::vec3 zp1  = ndcCoord + 0.5f * axisLength * zdir; zp1.z = 0.f;
     glm::vec3 xp1  = ndcCoord + 0.5f * axisLength * xdir; xp1.z = 0.f;
@@ -1093,9 +1103,12 @@ void renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoor
     glColor3f(1,1,1);
     renderArc(glm::vec3(circleRadius,0,0)+screenCoord, screenCoord, glm::vec3(0,0,-1), 360.f);
 
-    glm::vec3 xdir = glm::normalize(applyMatrix(transform, glm::vec3(1,0,0), false));
-    glm::vec3 ydir = glm::normalize(applyMatrix(transform, glm::vec3(0,1,0), false));
-    glm::vec3 zdir = glm::normalize(applyMatrix(transform, glm::vec3(0,0,1), false));
+    glm::mat4 axisTrans = transform;
+    if (localMode)
+        axisTrans = axisTrans * selectedJoint->worldTransform;
+    glm::vec3 xdir = glm::normalize(applyMatrix(axisTrans, glm::vec3(1,0,0), false));
+    glm::vec3 ydir = glm::normalize(applyMatrix(axisTrans, glm::vec3(0,1,0), false));
+    glm::vec3 zdir = glm::normalize(applyMatrix(axisTrans, glm::vec3(0,0,1), false));
 
     glm::vec3 camdir(0,0,1);
     glm::vec3 dir; 
@@ -1213,14 +1226,6 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
     glEnableVertexAttribArray(coordAttrib);
     glEnableVertexAttribArray(jointAttrib);
     glEnableVertexAttribArray(weightAttrib);
-
-    for (size_t i = 0; i < 30; i++)
-    {
-        int face = i / 3;
-        int vert = i % 3;
-        std::cout << verts[i].norm << " VS " << rmesh->norms[rmesh->ffaces[face].fverts[vert].vn]
-            << '\n';
-    }
 
     glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
             sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, pos));
