@@ -61,6 +61,7 @@ static int startFrame = 1;
 static int endFrame = 60;
 static int currentFrame = 1;
 static std::map<int, SkeletonPose*> keyframes;
+static bool play;
 
 // translation mode variables
 static glm::vec3 startingPos; // the parent space starting pos of selectedJoint
@@ -82,6 +83,7 @@ static void autoSkinMesh();
 static SkeletonPose* currentPose();
 static void writeSkeleton(const char *filename); // writes the current bind position as skeleton
 
+static void playTimelineFunc(int val);
 static void setPoseFromFrame(int frame);
 static void setFrame(int frame);
 
@@ -404,7 +406,13 @@ void keyboard(GLubyte key, GLint x, GLint y)
     {
        keyframes.erase(currentFrame); 
     }
-
+    if (key == ' ' && meshMode == POSING_MODE)
+    {
+        play = !play;
+        std::cout << "playing: " << play << std::endl;
+        if (play)
+            glutTimerFunc(1000 / FPS, playTimelineFunc, 0);
+    }
     // Update display...
     glutPostRedisplay();
 }
@@ -600,6 +608,16 @@ void writeSkeleton(const char *filename)
     fclose(f);
 }
 
+void playTimelineFunc(int val)
+{
+    if (currentFrame == endFrame)
+        setFrame(startFrame);
+    else
+        setFrame(currentFrame + 1);
+    if (play)
+        glutTimerFunc(1000 / FPS, playTimelineFunc, 0);
+}
+
 void setPoseFromFrame(int frame)
 {
     if (keyframes.count(frame) > 0)
@@ -611,6 +629,7 @@ void setPoseFromFrame(int frame)
 void setFrame(int frame)
 {
     currentFrame = frame;
+    glutPostRedisplay();
     setPoseFromFrame(frame);
 }
 
