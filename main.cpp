@@ -396,7 +396,7 @@ void keyboard(GLubyte key, GLint x, GLint y)
     {
         keyframes[currentFrame] = currentPose();
     }
-    if (key == 'l' && meshMode == POSING_MODE)
+    if (key == 'K' && meshMode == POSING_MODE)
     {
 		// TODO delete keyframe (using freeSkeletonPose)
         keyframes.erase(currentFrame); 
@@ -408,6 +408,8 @@ void keyboard(GLubyte key, GLint x, GLint y)
         if (play)
             glutTimerFunc(1000 / FPS, playTimelineFunc, 0);
     }
+    if (key == 'l')
+        localMode = !localMode;
     // Update display...
     glutPostRedisplay();
 }
