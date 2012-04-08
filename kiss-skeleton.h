@@ -48,6 +48,10 @@ public:
     // Sets the current pose as the bind pose
     void setBindPose();
 
+    // Returns the current pose.
+    // returned value MUST be freed with freeSkeletonPose
+    SkeletonPose *currentPose() const;
+
     // The parent index of the root bone
     static const unsigned ROOT_PARENT;
 

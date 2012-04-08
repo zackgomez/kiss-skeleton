@@ -17,11 +17,6 @@
 // constants
 static int windowWidth = 800, windowHeight = 1000;
 static int timelineHeight = 200;
-static const float selectThresh = 0.02f;
-static const float axisLength = 0.10f; // ndc
-static const float circleRadius = 0.12f; //ndc
-static const float scaleCircleRadius = 0.15f; //ndc
-static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
 static const int NO_MESH_MODE = 0, SKINNING_MODE = 1, POSING_MODE = 2;
 static const int FPS = 24;
 
@@ -42,16 +37,7 @@ static glm::vec3 axisNDC[3]; // x,y,z axis marker endpoints
 static glm::vec3 circleNDC;  // circle ndc coordinate
 
 // UI vars
-static const Joint *selectedJoint = NULL;
-static glm::vec2 dragStart;
-static float zoomStart; // starting zoom level of a zoom drag
-static bool rotating = false;
-static bool dragging = false;
-static bool zooming  = false;
-static bool translating = false;
 static int meshMode = NO_MESH_MODE;
-static int editMode = TRANSLATION_MODE;
-static bool localMode = false;
 
 // Timeline vars
 static int startFrame = 1;
@@ -156,19 +142,6 @@ void redraw(void)
     glutSwapBuffers();
 }
 
-void reshape(int width, int height)
-{
-    if (width <= 0 || height <= 0)
-        return;
-
-    windowWidth = width;
-    windowHeight = height;
-
-    glViewport(0, 0, windowWidth, windowHeight);
-
-    arcball->setAspect((float) windowWidth / (windowHeight - timelineHeight));
-}
-
 void mouse(int button, int state, int x, int y)
 {
     // Left button possible starts an edit
@@ -218,29 +191,7 @@ void mouse(int button, int state, int x, int y)
     {
         if (state == GLUT_DOWN)
         {
-            selectedJoint = NULL;
-            glm::vec2 screencoord = clickToScreenPos(x, y);
-
-            // Find closest joint
-            float nearest = HUGE_VAL;
-            for (size_t i = 0; i < jointNDC.size(); i++)
-            {
-                const glm::vec3 &ndc = jointNDC[i];
-                float dist = glm::length(screencoord - glm::vec2(ndc));
-                if (dist < selectThresh && ndc.z < nearest)
-                {
-                    selectedJoint = skeleton->getJoint(i);
-                    nearest = ndc.z;
-                }
-            }
         }
-    }
-    // Mouse wheel (buttons 3 and 4) zooms in an out (translates camera)
-    else if (button == 3 || button == 4)
-    {
-        const float zoomSpeed = 1.1f;
-        float fact = (button == 4) ? zoomSpeed : 1.f/zoomSpeed;
-        arcball->setZoom(arcball->getZoom() * fact);
     }
 
     glutPostRedisplay();
@@ -260,21 +211,6 @@ void motion(int x, int y)
             setJointScale(selectedJoint, screenpos);
         else
             assert(false && "Unknown edit mode");
-    }
-    else if (zooming)
-    {
-        glm::vec2 delta = clickToScreenPos(x, y) - dragStart;
-        
-        // only the y coordinate of the drag matters
-        float fact = delta.y;
-
-        float newZoom = zoomStart * powf(zoomSpeed, fact);
-        arcball->setZoom(newZoom);
-    }
-    else if (translating)
-    {
-        glm::vec2 delta = clickToScreenPos(x, y) - dragStart;
-        arcball->translate(-10.f * delta);
     }
 
     glutPostRedisplay();
@@ -427,14 +363,6 @@ glm::vec2 clickToScreenPos(int x, int y)
 
     //std::cout << "in: " << x << ' ' << y << "  coord: " << screencoord << '\n';
     return screencoord;
-}
-
-glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
-{
-    glm::vec4 pt(vec, homo ? 1 : 0);
-    pt = mat * pt;
-    if (homo) pt /= pt.w;
-    return glm::vec3(pt);
 }
 
 void autoSkinMesh()
@@ -817,238 +745,6 @@ void setJointScale(const Joint* joint, const glm::vec2 &dragPos)
     pose.pos = joint->pos;
     pose.scale = newScale;
     skeleton->setPose(selectedJoint->index, &pose);
-}
-
-void renderJoint(const glm::mat4 &transform, const Joint* joint,
-        const std::vector<Joint*> joints)
-{
-    // Draw cube
-    glLoadMatrixf(glm::value_ptr(glm::scale(transform * joint->worldTransform,
-                    glm::vec3(0.08f))));
-    if (joint == selectedJoint)
-        glColor3fv(glm::value_ptr(selColor));
-    else
-        glColor3f(1, 1, 1);
-    renderCube();
-
-    // Render axis (x,y,z lines) if necessary
-    if (editMode == TRANSLATION_MODE && joint == selectedJoint)
-    {
-        glm::vec3 axisCenter = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
-        renderAxes(transform, axisCenter);
-    }
-    else if (editMode == ROTATION_MODE && joint == selectedJoint)
-    {
-        glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
-        renderRotationSphere(transform, pos);
-    }
-    else if (editMode == SCALE_MODE && joint == selectedJoint)
-    {
-        glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
-        renderScaleCircle(transform * joint->scale, pos);
-    }
-    // Record joint NDC coordinates
-    glm::mat4 ptrans = getProjectionMatrix();
-    glm::mat4 fullTransform = ptrans * transform * joint->worldTransform;
-    glm::vec4 jointndc(0,0,0,1);
-    jointndc = fullTransform * jointndc;
-    jointndc /= jointndc.w;
-    jointNDC[joint->index] = glm::vec3(jointndc);
-
-    // No "bone" to draw for root
-    if (joint->parent == 255)
-        return;
-
-    glLoadMatrixf(glm::value_ptr(transform));
-
-    glm::mat4 parentTransform = joints[joint->parent]->worldTransform;
-    glm::mat4 boneTransform = joint->worldTransform;
-
-    glm::vec4 start(0, 0, 0, 1), end(0, 0, 0, 1);
-    start = parentTransform * start;
-    start /= start.w;
-    end = boneTransform * end;
-    end /= end.w;
-
-    glBegin(GL_LINES);
-    glColor3f(1, 0, 0);
-    glVertex4fv(&start.x);
-
-    glColor3f(0, 1, 0);
-    glVertex4fv(&end.x);
-    glEnd();
-}
-
-void renderLine(const glm::mat4 &transform, const glm::vec3 &p0, const glm::vec3 &p1)
-{
-    glLoadMatrixf(glm::value_ptr(transform));
-    glBegin(GL_LINES);
-    glVertex3fv(glm::value_ptr(p0));
-    glVertex3fv(glm::value_ptr(p1));
-    glEnd();
-}
-
-void renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
-{
-    // Render in NDC coordinates, no projection matrix needed
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW);
-
-    // ndc coord of axis center
-    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
-
-    glm::mat4 axisTransform = getProjectionMatrix() * transform;
-    if (localMode)
-        axisTransform = axisTransform * selectedJoint->worldTransform;
-
-    glm::vec3 xdir = applyMatrix(axisTransform, glm::vec3(1,0,0), false);
-    glm::vec3 ydir = applyMatrix(axisTransform, glm::vec3(0,1,0), false);
-    glm::vec3 zdir = applyMatrix(axisTransform, glm::vec3(0,0,1), false);
-    glm::vec3 p0   = glm::vec3(ndcCoord.x, ndcCoord.y, 0.f);
-    glm::vec3 zp1  = ndcCoord + 0.5f * axisLength * zdir; zp1.z = 0.f;
-    glm::vec3 xp1  = ndcCoord + 0.5f * axisLength * xdir; xp1.z = 0.f;
-    glm::vec3 yp1  = ndcCoord + 0.5f * axisLength * ydir; yp1.z = 0.f;
-
-    // render x axis
-    glColor3f(1.0f, 0.5f, 0.5f);
-    renderLine(glm::mat4(1.f),
-            p0,
-            xp1);
-    // render y axis
-    glColor3f(0.5f, 1.0f, 0.5f);
-    renderLine(glm::mat4(1.f),
-            p0,
-            yp1);
-    // render z axis
-    glColor3f(0.5f, 0.5f, 1.0f);
-    renderLine(glm::mat4(1.f),
-            p0,
-            zp1);
-    // axis record NDC coordinates...
-    axisNDC[0] = xp1;
-    axisNDC[1] = yp1;
-    axisNDC[2] = zp1;
-
-    // render and record an enclosing circle
-    glm::mat4 circleTransform = glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), glm::vec3(circleRadius));
-    glColor3f(1.f, 1.f, 1.f);
-    renderCircle(circleTransform);
-    // record center ndc coord
-    circleNDC = ndcCoord;
-
-    // Fix matrices
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
-}
-
-void renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &worldCoord)
-{
-    // Render in NDC coordinates, no projection matrix needed
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW);
-
-    // ndc coord of axis center
-    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
-
-    // render and record an enclosing circle
-    glm::mat4 circleTransform = glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), glm::vec3(scaleCircleRadius));
-    glColor3f(1.f, 0.5f, 0.5f);
-    renderCircle(circleTransform);
-    // record center ndc coord
-    circleNDC = ndcCoord;
-
-    // Fix matrices
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
-
-}
-
-void renderCircle(const glm::mat4 &transform)
-{
-    const float r = 1.f;
-    const int nsegments = 100;
-
-    glLoadMatrixf(glm::value_ptr(transform));
-
-    glBegin(GL_LINE_LOOP);
-    for (float theta = 0.f; theta < 2*M_PI; theta += 2*M_PI/nsegments)
-        glVertex3f(r*cosf(theta), r*sinf(theta), 0.f);
-    glEnd();
-}
-
-void renderArc(const glm::vec3 &start, const glm::vec3 &center,
-        const glm::vec3 &normal, float deg)
-{
-    glLoadIdentity();
-    const int nsegments = 50;
-    const glm::vec3 arm = start - center;
-
-    glBegin(GL_LINE_STRIP);
-    for (int i = 0; i < nsegments+1; i++)
-    {
-        float theta = i * deg/nsegments - deg/2.f;
-        glm::mat4 rot = glm::rotate(glm::mat4(1.f), theta, normal);
-        glm::vec3 pt = applyMatrix(rot, arm) + center;
-        glVertex3fv(glm::value_ptr(pt));
-    }
-    glEnd();
-}
-
-void renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoord)
-{
-    // Render in NDC coordinates, no projection matrix needed
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW);
-
-    glm::mat4 fullMat = getProjectionMatrix() * transform;
-
-    glm::vec3 ndcCoord = applyMatrix(fullMat, worldCoord);
-    glm::vec3 screenCoord = glm::vec3(ndcCoord.x, ndcCoord.y, 0.f);
-
-    // Render a white enclosing circle
-    glColor3f(1,1,1);
-    renderArc(glm::vec3(circleRadius,0,0)+screenCoord, screenCoord, glm::vec3(0,0,-1), 360.f);
-
-    glm::mat4 axisTrans = transform;
-    if (localMode)
-        axisTrans = axisTrans * selectedJoint->worldTransform;
-    glm::vec3 xdir = glm::normalize(applyMatrix(axisTrans, glm::vec3(1,0,0), false));
-    glm::vec3 ydir = glm::normalize(applyMatrix(axisTrans, glm::vec3(0,1,0), false));
-    glm::vec3 zdir = glm::normalize(applyMatrix(axisTrans, glm::vec3(0,0,1), false));
-
-    glm::vec3 camdir(0,0,1);
-    glm::vec3 dir; 
-    
-    glColor3f(1,0.5f,0.5f);
-    dir = glm::normalize(camdir - glm::dot(camdir, xdir) * xdir);
-    renderArc(screenCoord + axisLength*dir, screenCoord, xdir, 180.f);
-
-    glColor3f(0.5f,1,0.5f);
-    dir = glm::normalize(camdir - glm::dot(camdir, ydir) * ydir);
-    renderArc(screenCoord + axisLength*dir, screenCoord, ydir, 180.f);
-
-    glColor3f(0.5f,0.5f,1);
-    dir = glm::normalize(camdir - glm::dot(camdir, zdir) * zdir);
-    renderArc(screenCoord + axisLength*dir, screenCoord, zdir, 180.f);
-
-    // Fix matrices
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
-
-
-    // Record
-    axisDir[0] = xdir;
-    axisDir[1] = ydir;
-    axisDir[2] = zdir;
 }
 
 void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)

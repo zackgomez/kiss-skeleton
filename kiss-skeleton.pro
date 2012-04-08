@@ -3,11 +3,13 @@ INCLUDEPATH += glm-0.9.2.7
 
 HEADERS       = glwidget.h \
                 window.h \
-                arcball.h
+                arcball.h \
+                kiss-skeleton.h
 SOURCES       = glwidget.cpp \
                 qtmain.cpp \
                 window.cpp \
-                arcball.cpp
+                arcball.cpp \
+                kiss-skeleton.cpp
 QT           += opengl
 LIBS         += -lGLEW
 
