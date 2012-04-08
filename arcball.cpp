@@ -54,6 +54,7 @@ void Arcball::start(const glm::vec3 &ndc)
 {
     lastRot_ = curRot_;
     start_ = ndcToSphere(ndc);
+	originStart_ = origin_;
 }
 
 void Arcball::move(const glm::vec3 &ndc)
@@ -73,6 +74,14 @@ void Arcball::move(const glm::vec3 &ndc)
     glm::mat4 nextRot = quatrot(cross.x, cross.y, cross.z, cosa);
 
     curRot_ = nextRot * lastRot_;
+}
+
+void Arcball::translate(const glm::vec2 &change)
+{
+	const glm::vec3 up = glm::normalize(applyMatrix(glm::inverse(getViewMatrix()), glm::vec3(0,1,0), false));
+	const glm::vec3 right = glm::normalize(applyMatrix(glm::inverse(getViewMatrix()), glm::vec3(1,0,0), false));
+
+	origin_ = originStart_ + up * change.y + right * change.x;
 }
 
 const glm::mat4 &Arcball::getProjectionMatrix() const

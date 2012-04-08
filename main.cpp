@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 #include <GL/glew.h>
 #include <GL/glut.h>
 #include <math.h>       /* for cos(), sin(), and sqrt() */
@@ -48,7 +49,6 @@ static glm::vec3 circleNDC;  // circle ndc coordinate
 static const Joint *selectedJoint = NULL;
 static glm::vec2 dragStart;
 static float zoomStart; // starting zoom level of a zoom drag
-static glm::vec3 originStart;
 static bool rotating = false;
 static bool dragging = false;
 static bool zooming  = false;
@@ -265,7 +265,7 @@ void mouse(int button, int state, int x, int y)
             else if (glutGetModifiers() & GLUT_ACTIVE_SHIFT)
             {
                 dragStart = clickToScreenPos(x, y);
-                originStart = arcball->getOrigin();
+				arcball->start(glm::vec3(dragStart, 0.f));
                 translating = true;
             }
             else if (!glutGetModifiers())
@@ -324,21 +324,11 @@ void motion(int x, int y)
 
         float newZoom = zoomStart * powf(zoomSpeed, fact);
         arcball->setZoom(newZoom);
-
-        // std::cout << "fact: " << fact << " newZoom: " << newZoom << '\n';
     }
     else if (translating)
     {
         glm::vec2 delta = clickToScreenPos(x, y) - dragStart;
-        // Get the translation plane
-        glm::vec3 up = applyMatrix(glm::inverse(getViewMatrix()), glm::vec3(0, 1, 0), false);
-        glm::vec3 right = applyMatrix(glm::inverse(getViewMatrix()), glm::vec3(1, 0, 0), false);
-
-        // move about the plane!
-        glm::vec3 originDelta =
-            up * -delta.y + right * -delta.x;
-
-        arcball->setOrigin(originStart + 10.f * originDelta);
+        arcball->translate(-10.f * delta);
     }
 
     glutPostRedisplay();
@@ -1165,15 +1155,15 @@ void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
     */
 
     glVertexAttribPointer(positionAttrib, 4, GL_FLOAT, GL_FALSE,
-            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, pos));
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, pos));
     glVertexAttribPointer(normalAttrib,   3, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, norm));
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, norm));
     glVertexAttribPointer(coordAttrib,    2, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, coord));
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, coord));
     glVertexAttribIPointer(jointAttrib,    4, GL_INT,
-            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, joints));
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, joints));
     glVertexAttribPointer(weightAttrib,   4, GL_FLOAT,  GL_FALSE,
-            sizeof(vert_p4t2n3j8), (void*)verts + offsetof(vert_p4t2n3j8, weights));
+            sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, weights));
 
     glDrawArrays(GL_TRIANGLES, 0, nverts);
 

@@ -5,6 +5,10 @@
 #include <cstring>
 #include <glm/gtc/type_ptr.hpp>
 
+#ifdef _MSC_VER
+#define strtok_r strtok_s
+#endif
+
 static facevert parseFaceVert(const char *vdef);
 static void show_info_log( GLuint object, PFNGLGETSHADERIVPROC glGet__iv,
         PFNGLGETSHADERINFOLOGPROC glGet__InfoLog);
