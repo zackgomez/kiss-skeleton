@@ -20,8 +20,11 @@ private:
     QMenu *fileMenu;
     QMenu *skinningMenu;
 
-    QAction *exitAct;
+    QAction *newAct;
     QAction *openAct;
+    QAction *importAct;
+    QAction *exportAct;
+    QAction *exitAct;
 
     QAction *autoSkinAct;
 

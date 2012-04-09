@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <sstream>
 #include <glm/gtc/type_ptr.hpp>
 
 #ifdef _MSC_VER
@@ -16,12 +17,13 @@ static void *file_contents(const char *filename, GLint *length);
 
 rawmesh* loadRawMesh(const char *filename, bool &skinned)
 {
-    FILE *f = fopen(filename, "r");
-    if (!f)
-    {
-        fprintf(stderr, "Unable to open %s for reading\n", filename);
+    // Read file contents into streamstream object
+    int len = 0;
+    char *contents = (char *) file_contents(filename, &len);
+    if (!contents)
         return NULL;
-    }
+    std::stringstream cs(std::string(contents, len), std::stringstream::in);
+    free(contents);
 
     // First count the number of vertices and faces
     unsigned nverts = 0, nfaces = 0, nnorms = 0, ncoords = 0;
@@ -30,10 +32,11 @@ rawmesh* loadRawMesh(const char *filename, bool &skinned)
     // lines should never be longer than 1024 in a .obj...
     char buf[1024];
 
-    while (fgets(buf, sizeof(buf), f))
+    while (cs.getline(buf, sizeof buf))
     {
         char *cmd = strtok(buf, " ");
         char *arg = strtok(NULL, " ");
+        if (nverts == 0) printf("cmd %s arg %s\n", cmd, arg);
         if (strcmp(cmd, "v") == 0)
             nverts++;
         if (strcmp(cmd, "f") == 0)
@@ -42,7 +45,7 @@ rawmesh* loadRawMesh(const char *filename, bool &skinned)
             nnorms++;
         if (strcmp(cmd, "vt") == 0)
             ncoords++;
-        if (strcmp(cmd, "ext") == 0 && strcmp(arg, "geosmash"))
+        if (strcmp(cmd, "ext") == 0 && strcmp(arg, "geosmash") == 0)
             extended = true;
     }
 
@@ -62,11 +65,12 @@ rawmesh* loadRawMesh(const char *filename, bool &skinned)
     // TODO replace asserts will some real memory checks
 
     // reset to beginning of file
-    fseek(f,  0, SEEK_SET);
+    cs.clear();
+    cs.seekg(0, std::ios::beg);
 
     size_t verti = 0, facei = 0, normi = 0, coordi = 0;
     // Read each line and act on it as necessary
-    while (fgets(buf, sizeof(buf), f))
+    while (cs.getline(buf, sizeof buf))
     {
         char *cmd = strtok(buf, " ");
 
@@ -134,12 +138,11 @@ rawmesh* loadRawMesh(const char *filename, bool &skinned)
         }
     }
 
+    printf("verti %zu\n", verti);
     assert(verti == nverts);
     assert(facei == nfaces);
     assert(normi == nnorms);
     assert(coordi == ncoords);
-    // Done with file
-    fclose(f);
 
     rawmesh *rmesh = (rawmesh*) malloc(sizeof(rawmesh));
     // XXX again better error checking
