@@ -398,7 +398,8 @@ void keyboard(GLubyte key, GLint x, GLint y)
     if (key == 'l' && meshMode == POSING_MODE)
     {
 		// TODO delete keyframe (using freeSkeletonPose)
-        keyframes.erase(currentFrame); 
+        keyframes.erase(currentFrame);
+        freeSkeletonPose(editPose);
     }
     if (key == ' ' && meshMode == POSING_MODE)
     {
@@ -577,6 +578,35 @@ SkeletonPose* currentPose()
     }
 
     return pose;
+}
+
+void writeAnimations(const char *filename)
+{
+    FILE *f = fopen(filename, "w");
+    if (!f)
+    {
+        fprintf(stderr, "Unable to open %s for writing.\n", filename);
+        return;
+    }
+    std::map<int, SkeletonPose*>::iterator it;
+    for (it = keyframes.begin(); it != keyframes.end(); it++)
+    {
+        fprintf(f, "%d\n", (*it).first);
+        const std::vector<JointPose*> poses = (*it).second->poses;
+        for (size_t i = 0; i < poses.size(); i++)
+        {
+            const Joint *j = skeleton->getJoint(i);
+            const JointPose *p = poses[i];
+            // format is:
+            // pos(3f) rot(4f) scale(1f)
+            fprintf(f, "\t %f %f %f   %f %f %f %f   %f\n",
+                    p->pos[0], p->pos[1], p->pos[2],
+                    p->rot[0], p->rot[1], p->rot[2], p->rot[3],
+                    p->scale);
+        }
+ 
+    }
+    fclose(f);
 }
 
 void writeSkeleton(const char *filename)
