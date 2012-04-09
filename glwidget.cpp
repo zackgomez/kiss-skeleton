@@ -60,6 +60,7 @@ GLWidget::GLWidget(QWidget *parent) :
     play(false)
 {
     skeleton = NULL;
+    bindPose = NULL;
 
     rmesh = NULL;
     verts = NULL;
@@ -79,6 +80,11 @@ QSize GLWidget::sizeHint() const
     return QSize(800, 1000);
 }
 
+void GLWidget::newFile()
+{
+    closeFile();
+}
+
 void GLWidget::openFile(const QString &path)
 {
     closeFile();
@@ -87,34 +93,28 @@ void GLWidget::openFile(const QString &path)
     
     if (!f)
     {
-        // TODO display dialog
+        // TODO display error dialog
         return;
     }
 
     size_t len;
-    char *meshdata = (char *) gsm_mesh_contents(f, len);
+    char *data = (char *) gsm_mesh_contents(f, len);
     bool skinned = true;
-    rmesh = readRawMesh(meshdata, len, skinned);
-    free(meshdata);
-    meshMode = SKINNING_MODE;
+    rmesh = readRawMesh(data, len, skinned);
+    free(data);
     verts = createSkinnedVertArray(rmesh, &nverts);
+
+    data = (char *) gsm_bones_contents(f, len);
+    skeleton = new Skeleton();
+    skeleton->readSkeleton(data, len);
+    bindPose = skeleton->currentPose();
+    jointNDC.resize(skeleton->getJoints().size());
+    free(data);
 
     gsm_close(f);
 
-    // XXX hardcoded files
-    // Load and initialize skeleton variables
-    /*
-    skeleton = new Skeleton();
-    skeleton->readSkeleton("humanoid.bones");
-    bindPose = skeleton->currentPose();
-    jointNDC.resize(skeleton->getJoints().size());
-    */
-
-    //const char *meshfile = "fighter_disc.obj";
-    //bool skinned = true;
-    //rmesh = loadRawMesh(meshfile, skinned);
-    //verts = createSkinnedVertArray(rmesh, &nverts);
-    //meshMode = skinned ? POSING_MODE : SKINNING_MODE;
+    skeletonMode = STICK_MODE;
+    meshMode = POSING_MODE;
     
     currentFile = path;
 }
@@ -124,6 +124,8 @@ void GLWidget::closeFile()
     std::cout << "GLWidget::closeFile()\n";
     delete skeleton;
     skeleton = NULL;
+    freeSkeletonPose(bindPose);
+    bindPose = NULL;
 
     freeRawMesh(rmesh);
     rmesh = NULL;
@@ -136,7 +138,7 @@ void GLWidget::closeFile()
 
     currentFile.clear();
 
-    // TODO clear timeline and other stuff
+    // TODO clear timeline/keyframes
 }
 
 void GLWidget::initializeGL()

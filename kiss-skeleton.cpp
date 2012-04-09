@@ -68,6 +68,22 @@ void Skeleton::readSkeleton(const std::string &filename)
     setBindPose();
 }
 
+void Skeleton::readSkeleton(const char *text, size_t len)
+{
+    std::stringstream file(std::string(text, len));
+
+    std::string line;
+    while (std::getline(file, line))
+    {
+        if (line.empty())
+            continue;;
+        readJoint(line);
+    }
+
+    // the read position is the bind position
+    setBindPose();
+}
+
 const std::vector<Joint*> Skeleton::getJoints() const
 {
     return joints_;
@@ -166,6 +182,8 @@ void Skeleton::setWorldTransform(Joint *joint)
 
 void freeSkeletonPose(SkeletonPose *sp)
 {
+    if (!sp) return;
+
     for (size_t i = 0; i < sp->poses.size(); i++)
         delete sp->poses[i];
 }

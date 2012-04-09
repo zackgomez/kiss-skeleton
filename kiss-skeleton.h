@@ -38,6 +38,7 @@ public:
     ~Skeleton();
 
     void readSkeleton(const std::string &filename);
+    void readSkeleton(const char *text, size_t len);
 
     const std::vector<Joint*> getJoints() const;
     const Joint* getJoint(const std::string &name) const;

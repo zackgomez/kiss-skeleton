@@ -23,8 +23,9 @@ public:
     QSize sizeHint() const;
 
 public slots:
-    void closeFile();
+    void newFile();
     void openFile(const QString &path);
+    void closeFile();
 
 protected:
     void initializeGL();
