@@ -100,22 +100,30 @@ void GLWidget::openFile(const QString &path)
 
     size_t len;
     char *data = (char *) gsm_mesh_contents(f, len);
-    bool skinned = true;
-    rmesh = readRawMesh(data, len, skinned);
-    free(data);
-    verts = createSkinnedVertArray(rmesh, &nverts);
+    if (data)
+    {
+        bool skinned = true;
+        rmesh = readRawMesh(data, len, skinned);
+        verts = createSkinnedVertArray(rmesh, &nverts);
+        free(data);
+    }
 
     data = (char *) gsm_bones_contents(f, len);
-    skeleton = new Skeleton();
-    skeleton->readSkeleton(data, len);
-    bindPose = skeleton->currentPose();
-    jointNDC.resize(skeleton->getJoints().size());
-    free(data);
+    if (data)
+    {
+        skeleton = new Skeleton();
+        skeleton->readSkeleton(data, len);
+        bindPose = skeleton->currentPose();
+        jointNDC.resize(skeleton->getJoints().size());
+        free(data);
+    }
 
     gsm_close(f);
 
-    skeletonMode = STICK_MODE;
-    meshMode = POSING_MODE;
+    skeletonMode = skeleton ? STICK_MODE : NO_SKELETON_MODE;
+    meshMode = rmesh ?
+        (skeleton ? POSING_MODE : SKINNING_MODE) :
+        NO_MESH_MODE;
     
     currentFile = path;
 
@@ -140,19 +148,31 @@ void GLWidget::saveFileAs()
 
 void GLWidget::writeGSM(const QString &path)
 {
-    // XXX not sure what to do here if there are pieces missing
-    assert(skeleton && rmesh && bindPose);
+    gsm *gsmf;
+    if (!(gsmf = gsm_open(path.toAscii())))
+    {
+        QMessageBox::information(this, tr("Unable to open gsm file"),
+                tr("TODO There should be an error message here..."));
+        return;
+    }
 
-    FILE *bonef = tmpfile();
-    FILE *meshf = tmpfile();
-    assert(bonef && meshf);
+    if (skeleton)
+    {
+        assert(bindPose);
+        FILE *bonef = tmpfile();
+        assert(bonef);
+        writeSkeleton(bonef, skeleton, bindPose);
+        gsm_set_bones(gsmf, bonef);
+    }
+    if (rmesh)
+    {
+        FILE *meshf = tmpfile();
+        assert(meshf);
+        writeRawMesh(rmesh, meshf);
+        gsm_set_mesh(gsmf, meshf);
+    }
 
-    writeSkeleton(bonef, skeleton, bindPose);
-    writeRawMesh(rmesh, meshf);
-
-    if (!gsm_new(path.toAscii(), bonef, meshf))
-        QMessageBox::information(this, tr("Unable to save file"),
-                tr("DERP"));
+    gsm_close(gsmf);
 }
 
 void GLWidget::closeFile()
