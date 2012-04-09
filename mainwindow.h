@@ -24,6 +24,7 @@ private:
     QAction *openAct;
     QAction *importAct;
     QAction *exportAct;
+    QAction *closeAct;
     QAction *exitAct;
 
     QAction *autoSkinAct;
@@ -32,6 +33,5 @@ private:
 
     void createActions();
     void createMenus();
-
 };
 

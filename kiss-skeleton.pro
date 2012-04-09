@@ -1,19 +1,22 @@
-#VPATH += ../shared
-INCLUDEPATH += glm-0.9.2.7
+INCLUDEPATH  += glm-0.9.2.7
+CONFIG       += debug
+
 
 HEADERS       = glwidget.h \
                 arcball.h \
                 kiss-skeleton.h \
                 zgfx.h \
-                mainwindow.h
+                mainwindow.h \
+                libgsm.h
 SOURCES       = glwidget.cpp \
                 qtmain.cpp \
                 arcball.cpp \
                 kiss-skeleton.cpp \
                 zgfx.cpp \
-                mainwindow.cpp
+                mainwindow.cpp \
+                libgsm.cpp
 QT           += opengl
-LIBS         += -lGLEW
+LIBS         += -lGLEW -lzip
 
 # install
 target.path = $$[QT_INSTALL_EXAMPLES]/opengl/hellogl

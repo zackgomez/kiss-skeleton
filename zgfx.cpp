@@ -15,15 +15,19 @@ static void show_info_log( GLuint object, PFNGLGETSHADERIVPROC glGet__iv,
         PFNGLGETSHADERINFOLOGPROC glGet__InfoLog);
 static void *file_contents(const char *filename, GLint *length);
 
-rawmesh* loadRawMesh(const char *filename, bool &skinned)
+rawmesh * loadRawMesh(const char *filename, bool &skinned)
 {
-    // Read file contents into streamstream object
     int len = 0;
     char *contents = (char *) file_contents(filename, &len);
-    if (!contents)
-        return NULL;
-    std::stringstream cs(std::string(contents, len), std::stringstream::in);
+    rawmesh *ret =  readRawMesh(contents, len, skinned);
     free(contents);
+    return ret;
+}
+
+rawmesh * readRawMesh(const char *contents, size_t len, bool &skinned)
+{
+    // Read file contents into streamstream object
+    std::stringstream cs(std::string(contents, len), std::stringstream::in);
 
     // First count the number of vertices and faces
     unsigned nverts = 0, nfaces = 0, nnorms = 0, ncoords = 0;
@@ -36,7 +40,6 @@ rawmesh* loadRawMesh(const char *filename, bool &skinned)
     {
         char *cmd = strtok(buf, " ");
         char *arg = strtok(NULL, " ");
-        if (nverts == 0) printf("cmd %s arg %s\n", cmd, arg);
         if (strcmp(cmd, "v") == 0)
             nverts++;
         if (strcmp(cmd, "f") == 0)

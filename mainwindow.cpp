@@ -1,5 +1,6 @@
 #include <QMenuBar>
 #include <QAction>
+#include <QFileDialog>
 #include <iostream>
 #include "mainwindow.h"
 #include "glwidget.h"
@@ -20,12 +21,6 @@ MainWindow::MainWindow()
 
 void MainWindow::createActions()
 {
-    exitAct = new QAction(tr("E&xit"), this);
-    QKeySequence quitseq(tr("Ctrl+q"));
-    exitAct->setShortcut(quitseq);
-    exitAct->setStatusTip(tr("Exit the application"));
-    connect(exitAct, SIGNAL(triggered()), this, SLOT(close()));
-
     newAct = new QAction(tr("&New"), this);
     newAct->setShortcuts(QKeySequence::New);
     newAct->setStatusTip(tr("Start a new model"));
@@ -39,17 +34,28 @@ void MainWindow::createActions()
     importAct = new QAction(tr("Import"), this);
     importAct->setShortcut(QKeySequence(tr("Ctrl+i")));
     importAct->setStatusTip(tr("Import a resource"));
-    connect(openAct, SIGNAL(triggered()), this, SLOT(import()));
+    connect(importAct, SIGNAL(triggered()), this, SLOT(import()));
 
     exportAct = new QAction(tr("Export"), this);
     exportAct->setShortcut(QKeySequence(tr("Ctrl+e")));
     exportAct->setStatusTip(tr("Export a resource"));
     connect(exportAct, SIGNAL(triggered()), this, SLOT(export()));
 
+    closeAct = new QAction(tr("&Close"), this);
+    closeAct->setShortcuts(QKeySequence::Close);
+    closeAct->setStatusTip(tr("Close the current model"));
+    connect(closeAct, SIGNAL(triggered()), glwidget, SLOT(closeFile()));
+
+    exitAct = new QAction(tr("E&xit"), this);
+    exitAct->setShortcut(QKeySequence(tr("Ctrl+q")));
+    exitAct->setStatusTip(tr("Exit the application"));
+    connect(exitAct, SIGNAL(triggered()), this, SLOT(close()));
+
+
     autoSkinAct = new QAction(tr("Auto Skin"), this);
-    autoSkinAct->setShortcuts(QKeySequence::Open);
+    //autoSkinAct->setShortcuts(QKeySequence::Open);
     autoSkinAct->setStatusTip(tr("Automatically skin the mesh"));
-    connect(openAct, SIGNAL(triggered()), glwidget, SLOT(autoSkin()));
+    connect(autoSkinAct, SIGNAL(triggered()), glwidget, SLOT(autoSkin()));
 }
 
 void MainWindow::createMenus()
@@ -61,6 +67,7 @@ void MainWindow::createMenus()
     fileMenu->addAction(importAct);
     fileMenu->addAction(exportAct);
     fileMenu->addSeparator();
+    fileMenu->addAction(closeAct);
     fileMenu->addAction(exitAct);
 
     skinningMenu = menuBar()->addMenu(tr("&Skinning"));
@@ -73,4 +80,8 @@ void MainWindow::contextMenuEvent(QContextMenuEvent *event)
 
 void MainWindow::open()
 {
+    QString filename = QFileDialog::getOpenFileName(this,
+            tr("Open GSM"), ".", tr("GSM Files (*.gsm)"));
+
+    glwidget->openFile(filename);
 }

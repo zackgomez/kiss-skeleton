@@ -22,6 +22,10 @@ public:
     QSize minimumSizeHint() const;
     QSize sizeHint() const;
 
+public slots:
+    void closeFile();
+    void openFile(const QString &path);
+
 protected:
     void initializeGL();
     void paintGL();
@@ -41,10 +45,12 @@ private:
     vert_p4t2n3j8 *verts;
     size_t nverts;
 
+    QString currentFile;
+
     int windowWidth, windowHeight, timelineHeight;
     SkeletonPose *bindPose;
     const Joint* selectedJoint;
-    int meshMode, editMode;
+    int skeletonMode, meshMode, editMode;
     bool localMode;
 
     // graphics -> UI vars
@@ -103,7 +109,9 @@ private:
     static const float SCALE_CIRCLE_RADIUS;
     static const float SELECT_THRESH;
     static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
-    static const int NO_MESH_MODE = 0, SKINNING_MODE = 1, POSING_MODE = 2;
+    static const int NO_MESH_MODE, SKINNING_MODE, POSING_MODE;
     static const int FPS = 24;
+
+    enum { NO_SKELETON_MODE, STICK_MODE };
 };
 

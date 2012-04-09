@@ -7,6 +7,7 @@
 #include "glwidget.h"
 #include "Arcball.h"
 #include "kiss-skeleton.h"
+#include "libgsm.h"
 
 const float GLWidget::ZOOM_SPEED = 2.f;
 const float GLWidget::WHEEL_ZOOM_SPEED = 1.1f;
@@ -15,6 +16,9 @@ const float GLWidget::AXIS_LENGTH = 0.10f; // ndc
 const float GLWidget::CIRCLE_RADIUS= 0.12f; //ndc
 const float GLWidget::SCALE_CIRCLE_RADIUS = 0.15f; //ndc
 const float GLWidget::SELECT_THRESH = 0.02f;
+const int GLWidget::NO_MESH_MODE = 0;
+const int GLWidget::SKINNING_MODE = 1;
+const int GLWidget::POSING_MODE = 2;
 
 static void renderCube();
 static void renderCircle(const glm::mat4 &transform);
@@ -45,7 +49,8 @@ GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
     timelineHeight(200),
     selectedJoint(NULL),
-    meshMode(SKINNING_MODE),
+    skeletonMode(NO_SKELETON_MODE),
+    meshMode(NO_MESH_MODE),
     editMode(ROTATION_MODE),
     localMode(false),
     dragging(false),
@@ -54,18 +59,10 @@ GLWidget::GLWidget(QWidget *parent) :
     startFrame(1), endFrame(60), currentFrame(1),
     play(false)
 {
-    // XXX hardcoded files
-    // Load and initialize skeleton variables
-    skeleton = new Skeleton();
-    skeleton->readSkeleton("humanoid.bones");
-    bindPose = skeleton->currentPose();
-    jointNDC.resize(skeleton->getJoints().size());
+    skeleton = NULL;
 
-    const char *meshfile = "fighter_disc.obj";
-    bool skinned = true;
-    rmesh = loadRawMesh(meshfile, skinned);
-    verts = createSkinnedVertArray(rmesh, &nverts);
-    meshMode = skinned ? POSING_MODE : SKINNING_MODE;
+    rmesh = NULL;
+    verts = NULL;
 }
 
 GLWidget::~GLWidget()
@@ -80,6 +77,66 @@ QSize GLWidget::minimumSizeHint() const
 QSize GLWidget::sizeHint() const
 {
     return QSize(800, 1000);
+}
+
+void GLWidget::openFile(const QString &path)
+{
+    closeFile();
+
+    gsm *f = gsm_open(path.toAscii());
+    
+    if (!f)
+    {
+        // TODO display dialog
+        return;
+    }
+
+    size_t len;
+    char *meshdata = (char *) gsm_mesh_contents(f, len);
+    bool skinned = true;
+    rmesh = readRawMesh(meshdata, len, skinned);
+    free(meshdata);
+    meshMode = SKINNING_MODE;
+    verts = createSkinnedVertArray(rmesh, &nverts);
+
+    gsm_close(f);
+
+    // XXX hardcoded files
+    // Load and initialize skeleton variables
+    /*
+    skeleton = new Skeleton();
+    skeleton->readSkeleton("humanoid.bones");
+    bindPose = skeleton->currentPose();
+    jointNDC.resize(skeleton->getJoints().size());
+    */
+
+    //const char *meshfile = "fighter_disc.obj";
+    //bool skinned = true;
+    //rmesh = loadRawMesh(meshfile, skinned);
+    //verts = createSkinnedVertArray(rmesh, &nverts);
+    //meshMode = skinned ? POSING_MODE : SKINNING_MODE;
+    
+    currentFile = path;
+}
+
+void GLWidget::closeFile()
+{
+    std::cout << "GLWidget::closeFile()\n";
+    delete skeleton;
+    skeleton = NULL;
+
+    freeRawMesh(rmesh);
+    rmesh = NULL;
+    free(verts);
+    verts = NULL;
+    nverts = 0;
+
+    skeletonMode = NO_SKELETON_MODE;
+    meshMode = NO_MESH_MODE;
+
+    currentFile.clear();
+
+    // TODO clear timeline and other stuff
 }
 
 void GLWidget::initializeGL()
@@ -122,9 +179,12 @@ void GLWidget::paintGL()
     renderEditGrid();
 
     // Render the joints
-    const std::vector<Joint*> joints = skeleton->getJoints();
-    for (size_t i = 0; i < joints.size(); i++)
-        renderJoint(viewMatrix, joints[i], joints);
+    if (skeletonMode != NO_SKELETON_MODE)
+    {
+        const std::vector<Joint*> joints = skeleton->getJoints();
+        for (size_t i = 0; i < joints.size(); i++)
+            renderJoint(viewMatrix, joints[i], joints);
+    }
 
     // And the mesh
     if (meshMode == SKINNING_MODE)

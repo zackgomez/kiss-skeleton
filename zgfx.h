@@ -55,6 +55,7 @@ struct rawmesh
 // skinned=true means allocate space for skinning info
 // writes out skinned=true if file contained skin data
 rawmesh * loadRawMesh(const char *filename, bool &skinned);
+rawmesh * readRawMesh(const char *contents, size_t len, bool &skinned);
 void freeRawMesh(rawmesh *rmesh);
 
 void writeRawMesh(rawmesh *rmesh, const char *filename);
