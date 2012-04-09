@@ -1,6 +1,7 @@
 #pragma once
 #include <GL/glew.h>
 #include <QGLWidget>
+#include <QTimer>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <map>
@@ -43,6 +44,9 @@ protected:
     // helper functions
     void writeGSM(const QString &path);
 
+private slots:
+    void update();
+
 private:
     // Data members
     Arcball *arcball;
@@ -79,6 +83,8 @@ private:
     // Timeline vars
     int startFrame, endFrame, currentFrame;
     std::map<int, SkeletonPose*> keyframes;
+    QTimer *animTimer;
+    SkeletonPose *copyPose;
     bool play;
 
     // Skeleton editing functions

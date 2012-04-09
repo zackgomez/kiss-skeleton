@@ -281,6 +281,28 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
         editMode = SCALE_MODE;
     else if (e->key() == Qt::Key_K)
         keyframes[currentFrame] = skeleton->currentPose();
+    else if (e->key() == Qt::Key_L)
+    {
+        keyframes.erase(currentFrame);
+    }
+    else if (e->key() == Qt::Key_Space)
+    {
+        play = !play;
+        if (play)
+        {
+            animTimer = new QTimer(this);
+            connect(animTimer, SIGNAL(timeout()), this, SLOT(update()));
+            animTimer->start(1000 / FPS);
+        }
+        else
+        {
+            animTimer->stop();
+        }
+    }
+    else if (e->key() == Qt::Key_C)
+        copyPose = skeleton->currentPose();
+    else if (e->key() == Qt::Key_V)
+        skeleton->setPose(copyPose);
     else
         QWidget::keyPressEvent(e);
 
@@ -683,8 +705,16 @@ void GLWidget::setFrame(int frame)
 {
     currentFrame = frame;
     setPoseFromFrame(frame);
+    updateGL();
 }
 
+void GLWidget::update()
+{
+    if (currentFrame == endFrame)
+        setFrame(startFrame);
+    else
+        setFrame(currentFrame + 1);
+}
 
 void GLWidget::renderTimeline()
 {
