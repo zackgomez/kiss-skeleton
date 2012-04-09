@@ -31,10 +31,10 @@ void MainWindow::createActions()
     openAct->setStatusTip(tr("Open an existing file"));
     connect(openAct, SIGNAL(triggered()), this, SLOT(open()));
 
-    openAct = new QAction(tr("&Open..."), this);
-    openAct->setShortcuts(QKeySequence::Open);
-    openAct->setStatusTip(tr("Open an existing file"));
-    connect(openAct, SIGNAL(triggered()), this, SLOT(open()));
+    autoSkinAct = new QAction(tr("Auto Skin..."), this);
+    autoSkinAct->setShortcuts(QKeySequence::Open);
+    autoSkinAct->setStatusTip(tr("Automatically skin the mesh"));
+    connect(openAct, SIGNAL(triggered()), this, SLOT(glwidget->autoSkin()));
 }
 
 void MainWindow::createMenus()

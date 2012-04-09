@@ -98,6 +98,8 @@ void GLWidget::initializeGL()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     shaderProgram = make_program("meshskin.v.glsl", "meshskin.f.glsl");
+    if (!shaderProgram)
+        exit(1);
 
     arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 }

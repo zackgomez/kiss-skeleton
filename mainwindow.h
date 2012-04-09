@@ -23,6 +23,8 @@ private:
     QAction *exitAct;
     QAction *openAct;
 
+    QAction *autoSkinAct;
+
     GLWidget *glwidget;
 
     void createActions();
