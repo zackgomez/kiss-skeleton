@@ -11,20 +11,39 @@ struct gsm
 
 // Helper functions
 static void *zip_file_contents(struct zip *archive, const char *filename, size_t &len);
+static int zip_set_file(struct zip *archive, const char *filename, FILE *f);
 
 
 // Function definitions
 
-gsm *gsm_open(const char *gsmfile)
+gsm *gsm_open(const char *gsmfile, int flags)
 {
-    struct zip *zfile = zip_open(gsmfile, 0, NULL);
+    int zflags = 0;
+    if (flags | GSM_CREATE)
+        zflags |= ZIP_CREATE;
+
+    struct zip *zfile = zip_open(gsmfile, zflags, NULL);
     if (!zfile)
     {
         printf("Unable to open gsmfile %s.\n", gsmfile);
         return NULL;
     }
 
-    // TODO add checks for required files
+    // checks for expected files
+    /*
+    if (zip_name_locate(zfile, "model.obj", 0) < 0)
+    {
+        printf("Bad gsm archive: 'model.obj' not found.\n");
+        zip_close(zfile);
+        return NULL;
+    }
+    if (zip_name_locate(zfile, "skeleton.bones", 0) < 0)
+    {
+        printf("Bad gsm archive: 'skeleton.bones' not found.\n");
+        zip_close(zfile);
+        return NULL;
+    }
+    */
 
     gsm *ret = (gsm *) malloc(sizeof(gsm));
     ret->archive = zfile;
@@ -48,46 +67,14 @@ void *gsm_mesh_contents(gsm *file, size_t &len)
     return zip_file_contents(file->archive, "model.obj", len);
 }
 
-bool gsm_new(const char *gsmfile, FILE *bonesdata, FILE *meshdata)
+int gsm_set_bones(gsm *file, FILE *f)
 {
-    int zerror;
-    struct zip *zfile = zip_open(gsmfile, ZIP_CREATE | ZIP_EXCL, &zerror);
-    while (!zfile)
-    {
-        if (zerror == ZIP_ER_EXISTS)
-        {
-            remove(gsmfile);
-            zfile = zip_open(gsmfile, ZIP_CREATE | ZIP_EXCL, NULL);
-        }
-        else
-        {
-            printf("Unable to open gsmfile %s.\n", gsmfile);
-            return false;
-        }
-    }
+    return zip_set_file(file->archive, "skeleton.bones", f);
+}
 
-    // XXX some memory leaks here on errors
-    struct zip_source *s;
-    if ((s = zip_source_filep(zfile, meshdata, 0, -1)) == NULL ||
-            zip_add(zfile, "model.obj", s) < 0)
-    {
-        zip_source_free(s);
-        fprintf(stderr, "error adding file: %sn", zip_strerror(zfile));
-        zip_close(zfile);
-        return false;
-    }
-    if ((s = zip_source_filep(zfile, bonesdata, 0, -1)) == NULL ||
-            zip_add(zfile, "skeleton.bones", s) < 0)
-    {
-        zip_source_free(s);
-        fprintf(stderr, "error adding file: %sn", zip_strerror(zfile));
-        zip_close(zfile);
-        return false;
-    }
-
-    zip_close(zfile);
-
-    return true;
+int gsm_set_mesh(gsm *file, FILE *f)
+{
+    return zip_set_file(file->archive, "skeleton.bones", f);
 }
 
 void *zip_file_contents(struct zip *archive, const char *filename, size_t &len)
@@ -118,3 +105,32 @@ void *zip_file_contents(struct zip *archive, const char *filename, size_t &len)
     return contents;
 }
 
+int zip_set_file(struct zip *archive, const char *filename, FILE *f)
+{
+    zip_source *s;
+    if ((s = zip_source_filep(archive, f, 0, -1)) == NULL)
+        return -1;
+
+    // if it exists..
+    uint64_t idx;
+    if ((idx = zip_name_locate(archive, filename, 0)) != -1)
+    {
+        // try to replace
+        if (zip_replace(archive, idx, s) < 0)
+        {
+            zip_source_free(s);
+            return -1;
+        }
+    }
+    else
+    {
+        // just add
+        if (zip_add(archive, filename, s) < 0)
+        {
+            zip_source_free(s);
+            return -1;
+        }
+    }
+
+    return 0;
+}
