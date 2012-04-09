@@ -34,22 +34,22 @@ void MainWindow::createActions()
     saveAct = new QAction(tr("&Save"), this);
     saveAct->setShortcuts(QKeySequence::Save);
     saveAct->setStatusTip(tr("Save the current file"));
-    //connect(saveAct, SIGNAL(triggered()), glwidget, SLOT(saveFile()));
+    connect(saveAct, SIGNAL(triggered()), glwidget, SLOT(saveFile()));
 
     saveAsAct = new QAction(tr("Save &As..."), this);
-    saveAsAct->setShortcuts(QKeySequence::SaveAs);
+    saveAsAct->setShortcut(QKeySequence(tr("Ctrl+Shift+S")));
     saveAsAct->setStatusTip(tr("Save the current file with a different name"));
     connect(saveAsAct, SIGNAL(triggered()), glwidget, SLOT(saveFileAs()));
 
-    importAct = new QAction(tr("Import"), this);
+    importAct = new QAction(tr("Import..."), this);
     importAct->setShortcut(QKeySequence(tr("Ctrl+i")));
     importAct->setStatusTip(tr("Import a resource"));
-    connect(importAct, SIGNAL(triggered()), this, SLOT(import()));
+    //connect(importAct, SIGNAL(triggered()), this, SLOT(import()));
 
-    exportAct = new QAction(tr("Export"), this);
+    exportAct = new QAction(tr("Export..."), this);
     exportAct->setShortcut(QKeySequence(tr("Ctrl+e")));
     exportAct->setStatusTip(tr("Export a resource"));
-    connect(exportAct, SIGNAL(triggered()), this, SLOT(export()));
+    //connect(exportAct, SIGNAL(triggered()), this, SLOT(export()));
 
     closeAct = new QAction(tr("&Close"), this);
     closeAct->setShortcuts(QKeySequence::Close);

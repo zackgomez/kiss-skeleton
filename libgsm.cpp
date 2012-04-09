@@ -50,11 +50,20 @@ void *gsm_mesh_contents(gsm *file, size_t &len)
 
 bool gsm_new(const char *gsmfile, FILE *bonesdata, FILE *meshdata)
 {
-    struct zip *zfile = zip_open(gsmfile, ZIP_CREATE, NULL);
-    if (!zfile)
+    int zerror;
+    struct zip *zfile = zip_open(gsmfile, ZIP_CREATE | ZIP_EXCL, &zerror);
+    while (!zfile)
     {
-        printf("Unable to open gsmfile %s.\n", gsmfile);
-        return false;
+        if (zerror == ZIP_ER_EXISTS)
+        {
+            remove(gsmfile);
+            zfile = zip_open(gsmfile, ZIP_CREATE | ZIP_EXCL, NULL);
+        }
+        else
+        {
+            printf("Unable to open gsmfile %s.\n", gsmfile);
+            return false;
+        }
     }
 
     // XXX some memory leaks here on errors

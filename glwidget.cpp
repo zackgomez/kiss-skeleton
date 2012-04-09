@@ -124,12 +124,14 @@ void GLWidget::openFile(const QString &path)
 
 void GLWidget::saveFile()
 {
+    std::cout << "saveFile()\n";
     if (currentFile.isEmpty()) return;
     writeGSM(currentFile);
 }
 
 void GLWidget::saveFileAs()
 {
+    std::cout << "saveFileAs()\n";
     QString path = QFileDialog::getSaveFileName(this, tr("Save GSM"),
             currentFile, tr("GSM Files (*.gsm)"));
     if (!path.isEmpty())
