@@ -279,6 +279,8 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
         editMode = TRANSLATION_MODE;
     else if (e->key() == Qt::Key_S)
         editMode = SCALE_MODE;
+    else if (e->key() == Qt::Key_K)
+        keyframes[currentFrame] = skeleton->currentPose();
     else
         QWidget::keyPressEvent(e);
 
@@ -353,8 +355,10 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
         {
             if (timelineCoord.y > 0.25f && timelineCoord.y < 0.75f)
             {
-                setFrame(startFrame + (event->x() * (endFrame - startFrame + 1) + windowWidth * 0.5f) / windowWidth - 1);
-                if (currentFrame > endFrame) currentFrame = endFrame;
+                int newFrame = startFrame + (event->x() * (endFrame - startFrame + 2) + windowWidth * 0.5f) / windowWidth - 1;
+                if (newFrame < startFrame) newFrame = startFrame;
+                if (newFrame > endFrame) newFrame = endFrame;
+                setFrame(newFrame);
                 std::cout << "Selected frame " << currentFrame << std::endl;
             }
         }
@@ -691,6 +695,7 @@ void GLWidget::renderTimeline()
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
+    glBegin(GL_LINES);
     for(int i = startFrame; i <= endFrame; i++)
     {
         // Highlight current frame red
@@ -700,11 +705,10 @@ void GLWidget::renderTimeline()
             glColor3f(1.0f, 1.0f, 1.0f);
         if (keyframes.count(i) > 0)
             glColor3f(1.0f, 1.0f, 0.0f);
-        glBegin(GL_LINES);
-            glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 1), 0.5f, 0);
-            glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 1), -0.5f, 0);
-        glEnd();
+            glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 2), 0.5f, 0);
+            glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 2), -0.5f, 0);
     }
+    glEnd();
 
     // Foreground
     glColor3f(0.5f, 0.5f, 0.5f);
