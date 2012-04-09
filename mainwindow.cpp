@@ -66,6 +66,28 @@ void MainWindow::createActions()
     //autoSkinAct->setShortcuts(QKeySequence::Open);
     autoSkinAct->setStatusTip(tr("Automatically skin the mesh"));
     connect(autoSkinAct, SIGNAL(triggered()), glwidget, SLOT(autoSkin()));
+    
+    
+    setKeyframe = new QAction(tr("Set &Keyframe"), this);
+    setKeyframe->setShortcut(QKeySequence(tr("Ctrl+k")));
+    setKeyframe->setStatusTip(tr("Creates a keyframe at the current frame with the current pose"));
+    connect(setKeyframe, SIGNAL(triggered()), glwidget, SLOT(setKeyframe()));
+    
+    delKeyframe = new QAction(tr("De&lete Keyframe"), this);
+    delKeyframe->setShortcut(QKeySequence(tr("Ctrl+l")));
+    delKeyframe->setStatusTip(tr("Deletes the keyframe at the current frame"));
+    connect(delKeyframe, SIGNAL(triggered()), glwidget, SLOT(deleteKeyframe()));
+    
+    copyPose = new QAction(tr("&Copy Pose"), this);
+    copyPose->setShortcut(QKeySequence(tr("Ctrl+c")));
+    copyPose->setStatusTip(tr("Copies the current pose"));
+    connect(copyPose, SIGNAL(triggered()), glwidget, SLOT(copyPose()));
+    
+    pastePose = new QAction(tr("&Paste Pose"), this);
+    pastePose->setShortcut(QKeySequence(tr("Ctrl+v")));
+    pastePose->setStatusTip(tr("Pastes the pose that was previously copied"));
+    connect(pastePose, SIGNAL(triggered()), glwidget, SLOT(pastePose()));
+    
 }
 
 void MainWindow::createMenus()
@@ -85,6 +107,12 @@ void MainWindow::createMenus()
 
     skinningMenu = menuBar()->addMenu(tr("&Skinning"));
     skinningMenu->addAction(autoSkinAct);
+
+    animationMenu = menuBar()->addMenu(tr("&Animation"));
+    animationMenu->addAction(setKeyframe);
+    animationMenu->addAction(delKeyframe);
+    animationMenu->addAction(copyPose);
+    animationMenu->addAction(pastePose);
 }
 
 void MainWindow::contextMenuEvent(QContextMenuEvent *event)

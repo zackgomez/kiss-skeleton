@@ -30,6 +30,10 @@ public slots:
     void saveFile();
     void saveFileAs();
     void closeFile();
+    void setKeyframe();
+    void deleteKeyframe();
+    void copyPose();
+    void pastePose();
 
 protected:
     void initializeGL();
@@ -84,7 +88,7 @@ private:
     int startFrame, endFrame, currentFrame;
     std::map<int, SkeletonPose*> keyframes;
     QTimer *animTimer;
-    SkeletonPose *copyPose;
+    SkeletonPose *copiedPose;
     bool play;
 
     // Skeleton editing functions

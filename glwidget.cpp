@@ -199,6 +199,33 @@ void GLWidget::closeFile()
     // TODO clear timeline/keyframes
 }
 
+void GLWidget::setKeyframe()
+{
+    if (skeleton == NULL) return;
+    keyframes[currentFrame] = skeleton->currentPose();
+    updateGL();
+}
+
+void GLWidget::deleteKeyframe()
+{
+    keyframes.erase(currentFrame);
+    updateGL();
+}
+
+void GLWidget::copyPose()
+{
+    if (skeleton == NULL) return;
+    copiedPose = skeleton->currentPose();
+    updateGL();
+}
+
+void GLWidget::pastePose()
+{
+    if (skeleton == NULL) return;
+    skeleton->setPose(copiedPose);
+    updateGL();
+}
+
 void GLWidget::initializeGL()
 {
     GLenum err = glewInit();
@@ -299,12 +326,6 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
         editMode = TRANSLATION_MODE;
     else if (e->key() == Qt::Key_S)
         editMode = SCALE_MODE;
-    else if (e->key() == Qt::Key_K)
-        keyframes[currentFrame] = skeleton->currentPose();
-    else if (e->key() == Qt::Key_L)
-    {
-        keyframes.erase(currentFrame);
-    }
     else if (e->key() == Qt::Key_Space)
     {
         play = !play;
@@ -319,10 +340,6 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
             animTimer->stop();
         }
     }
-    else if (e->key() == Qt::Key_C)
-        copyPose = skeleton->currentPose();
-    else if (e->key() == Qt::Key_V)
-        skeleton->setPose(copyPose);
     else
         QWidget::keyPressEvent(e);
 

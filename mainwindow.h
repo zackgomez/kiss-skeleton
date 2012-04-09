@@ -19,6 +19,7 @@ private slots:
 private:
     QMenu *fileMenu;
     QMenu *skinningMenu;
+    QMenu *animationMenu;
 
     QAction *newAct;
     QAction *openAct;
@@ -30,6 +31,11 @@ private:
     QAction *exitAct;
 
     QAction *autoSkinAct;
+
+    QAction *setKeyframe;
+    QAction *delKeyframe;
+    QAction *copyPose;
+    QAction *pastePose;
 
     GLWidget *glwidget;
 
