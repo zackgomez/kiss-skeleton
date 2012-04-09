@@ -24,7 +24,10 @@ public:
 
 public slots:
     void newFile();
+// TODO no arg
     void openFile(const QString &path);
+    void saveFile();
+    void saveFileAs();
     void closeFile();
 
 protected:
@@ -36,6 +39,9 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event);
     void mouseMoveEvent(QMouseEvent *event);
     void wheelEvent(QWheelEvent *event);
+
+    // helper functions
+    void writeGSM(const QString &path);
 
 private:
     // Data members

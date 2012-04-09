@@ -141,7 +141,6 @@ rawmesh * readRawMesh(const char *contents, size_t len, bool &skinned)
         }
     }
 
-    printf("verti %zu\n", verti);
     assert(verti == nverts);
     assert(facei == nfaces);
     assert(normi == nnorms);
@@ -203,9 +202,17 @@ void writeRawMesh(rawmesh *rmesh, const char *filename)
         return;
     }
 
+    writeRawMesh(rmesh, f);
+
+    fclose(f);
+}
+
+void writeRawMesh(rawmesh *rmesh, FILE *f)
+{
+    assert(f);
 
     // Write a comment saying kiss-skeleton did it
-    fprintf(f, "# kiss-skeleton v0.00 OBJ File: '%s'\n", filename);
+    fprintf(f, "# kiss-skeleton v0.00 OBJ File\n");
     // if the mesh contains skinning data, write out extension command
     bool extended = rmesh->joints && rmesh->weights;
     if (extended)
@@ -242,8 +249,6 @@ void writeRawMesh(rawmesh *rmesh, const char *filename)
                ffaces[i].fverts[0].v+1, ffaces[i].fverts[0].vn+1, ffaces[i].fverts[0].vt+1,
                ffaces[i].fverts[1].v+1, ffaces[i].fverts[1].vn+1, ffaces[i].fverts[1].vt+1,
                ffaces[i].fverts[2].v+1, ffaces[i].fverts[2].vn+1, ffaces[i].fverts[2].vt+1);
-
-    fclose(f);
 }
 
 vert_p4t2n3 * createVertArray(const rawmesh *mesh, size_t *nverts)

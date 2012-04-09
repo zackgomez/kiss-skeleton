@@ -198,6 +198,17 @@ void writeSkeleton(const char *filename, const Skeleton *skeleton,
         return;
     }
 
+    writeSkeleton(f, skeleton, bindPose);
+
+    fclose(f);
+}
+
+
+void writeSkeleton(FILE *f, const Skeleton *skeleton,
+        const SkeletonPose *bindPose)
+{
+    assert(f);
+
     const std::vector<JointPose*> poses = bindPose->poses;
     for (size_t i = 0; i < poses.size(); i++)
     {
@@ -210,7 +221,5 @@ void writeSkeleton(const char *filename, const Skeleton *skeleton,
                 p->rot[0], p->rot[1], p->rot[2], p->rot[3],
                 p->scale, j->parent);
     }
-
-    fclose(f);
 }
 

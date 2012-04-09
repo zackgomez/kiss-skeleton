@@ -3,6 +3,7 @@
 
 #include <GL/glew.h>
 #include <glm/glm.hpp>
+#include <cstdio>
 
 struct vert
 {
@@ -59,6 +60,7 @@ rawmesh * readRawMesh(const char *contents, size_t len, bool &skinned);
 void freeRawMesh(rawmesh *rmesh);
 
 void writeRawMesh(rawmesh *rmesh, const char *filename);
+void writeRawMesh(rawmesh *rmesh, FILE* f);
 
 vert_p4t2n3* createVertArray(const rawmesh *mesh, size_t *nverts);
 vert_p4t2n3j8* createSkinnedVertArray(const rawmesh *mesh, size_t *nverts);

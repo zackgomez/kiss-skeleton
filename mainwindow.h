@@ -22,6 +22,8 @@ private:
 
     QAction *newAct;
     QAction *openAct;
+    QAction *saveAct;
+    QAction *saveAsAct;
     QAction *importAct;
     QAction *exportAct;
     QAction *closeAct;

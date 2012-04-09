@@ -24,12 +24,22 @@ void MainWindow::createActions()
     newAct = new QAction(tr("&New"), this);
     newAct->setShortcuts(QKeySequence::New);
     newAct->setStatusTip(tr("Start a new model"));
-    connect(newAct, SIGNAL(triggered()), this, SLOT(new()));
+    connect(newAct, SIGNAL(triggered()), glwidget, SLOT(newFile()));
 
-    openAct = new QAction(tr("&Open"), this);
+    openAct = new QAction(tr("&Open..."), this);
     openAct->setShortcuts(QKeySequence::Open);
     openAct->setStatusTip(tr("Open an existing file"));
     connect(openAct, SIGNAL(triggered()), this, SLOT(open()));
+
+    saveAct = new QAction(tr("&Save"), this);
+    saveAct->setShortcuts(QKeySequence::Save);
+    saveAct->setStatusTip(tr("Save the current file"));
+    //connect(saveAct, SIGNAL(triggered()), glwidget, SLOT(saveFile()));
+
+    saveAsAct = new QAction(tr("Save &As..."), this);
+    saveAsAct->setShortcuts(QKeySequence::SaveAs);
+    saveAsAct->setStatusTip(tr("Save the current file with a different name"));
+    connect(saveAsAct, SIGNAL(triggered()), glwidget, SLOT(saveFileAs()));
 
     importAct = new QAction(tr("Import"), this);
     importAct->setShortcut(QKeySequence(tr("Ctrl+i")));
@@ -64,6 +74,9 @@ void MainWindow::createMenus()
     fileMenu->addAction(newAct);
     fileMenu->addAction(openAct);
     fileMenu->addSeparator();
+    fileMenu->addAction(saveAct);
+    fileMenu->addAction(saveAsAct);
+    fileMenu->addSeparator();
     fileMenu->addAction(importAct);
     fileMenu->addAction(exportAct);
     fileMenu->addSeparator();
@@ -83,5 +96,6 @@ void MainWindow::open()
     QString filename = QFileDialog::getOpenFileName(this,
             tr("Open GSM"), ".", tr("GSM Files (*.gsm)"));
 
-    glwidget->openFile(filename);
+    if (!filename.isEmpty())
+        glwidget->openFile(filename);
 }

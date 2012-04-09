@@ -3,6 +3,7 @@
 #include <map>
 #include <vector>
 #include <glm/glm.hpp>
+#include <cstdio>
 
 struct Joint
 {
@@ -66,4 +67,6 @@ private:
 
 void freeSkeletonPose(SkeletonPose *sp);
 void writeSkeleton(const char *filename, const Skeleton *skeleton,
+        const SkeletonPose *bindPose);
+void writeSkeleton(FILE *f, const Skeleton *Skeleton,
         const SkeletonPose *bindPose);

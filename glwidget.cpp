@@ -1,6 +1,7 @@
 #include <GL/glew.h>
 #include <QtGui>
 #include <iostream>
+#include <cassert>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -117,6 +118,39 @@ void GLWidget::openFile(const QString &path)
     meshMode = POSING_MODE;
     
     currentFile = path;
+
+    paintGL();
+}
+
+void GLWidget::saveFile()
+{
+    if (currentFile.isEmpty()) return;
+    writeGSM(currentFile);
+}
+
+void GLWidget::saveFileAs()
+{
+    QString path = QFileDialog::getSaveFileName(this, tr("Save GSM"),
+            currentFile, tr("GSM Files (*.gsm)"));
+    if (!path.isEmpty())
+        writeGSM(path);
+}
+
+void GLWidget::writeGSM(const QString &path)
+{
+    // XXX not sure what to do here if there are pieces missing
+    assert(skeleton && rmesh && bindPose);
+
+    FILE *bonef = tmpfile();
+    FILE *meshf = tmpfile();
+    assert(bonef && meshf);
+
+    writeSkeleton(bonef, skeleton, bindPose);
+    writeRawMesh(rmesh, meshf);
+
+    if (!gsm_new(path.toAscii(), bonef, meshf))
+        QMessageBox::information(this, tr("Unable to save file"),
+                tr("DERP"));
 }
 
 void GLWidget::closeFile()
@@ -137,6 +171,8 @@ void GLWidget::closeFile()
     meshMode = NO_MESH_MODE;
 
     currentFile.clear();
+
+    paintGL();
 
     // TODO clear timeline/keyframes
 }

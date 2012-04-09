@@ -28,6 +28,8 @@ gsm *gsm_open(const char *gsmfile)
 
     gsm *ret = (gsm *) malloc(sizeof(gsm));
     ret->archive = zfile;
+
+    return ret;
 }
 
 void gsm_close(gsm *gsm)
@@ -44,6 +46,39 @@ void *gsm_bones_contents(gsm *file, size_t &len)
 void *gsm_mesh_contents(gsm *file, size_t &len)
 {
     return zip_file_contents(file->archive, "model.obj", len);
+}
+
+bool gsm_new(const char *gsmfile, FILE *bonesdata, FILE *meshdata)
+{
+    struct zip *zfile = zip_open(gsmfile, ZIP_CREATE, NULL);
+    if (!zfile)
+    {
+        printf("Unable to open gsmfile %s.\n", gsmfile);
+        return false;
+    }
+
+    // XXX some memory leaks here on errors
+    struct zip_source *s;
+    if ((s = zip_source_filep(zfile, meshdata, 0, -1)) == NULL ||
+            zip_add(zfile, "model.obj", s) < 0)
+    {
+        zip_source_free(s);
+        fprintf(stderr, "error adding file: %sn", zip_strerror(zfile));
+        zip_close(zfile);
+        return false;
+    }
+    if ((s = zip_source_filep(zfile, bonesdata, 0, -1)) == NULL ||
+            zip_add(zfile, "skeleton.bones", s) < 0)
+    {
+        zip_source_free(s);
+        fprintf(stderr, "error adding file: %sn", zip_strerror(zfile));
+        zip_close(zfile);
+        return false;
+    }
+
+    zip_close(zfile);
+
+    return true;
 }
 
 void *zip_file_contents(struct zip *archive, const char *filename, size_t &len)
