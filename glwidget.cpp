@@ -99,7 +99,7 @@ void GLWidget::initializeGL()
 
     shaderProgram = make_program("meshskin.v.glsl", "meshskin.f.glsl");
 
-    arcball = new Arcball(glm::vec3(0, 0, -30), 20.f, 1.f, 0.1f, 1000.f, 50.f);
+    arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 }
 
 void GLWidget::paintGL()
