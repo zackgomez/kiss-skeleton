@@ -28,6 +28,7 @@ public slots:
 // TODO no arg
     void openFile(const QString &path);
     void importModel();
+    void importBones();
     void saveFile();
     void saveFileAs();
     void closeFile();
@@ -35,6 +36,7 @@ public slots:
     void deleteKeyframe();
     void copyPose();
     void pastePose();
+    void autoSkinMesh();
 
 protected:
     void initializeGL();
