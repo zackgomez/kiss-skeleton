@@ -433,3 +433,11 @@ void *file_contents(const char *filename, GLint *length)
     return buffer;
 }
 
+glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
+{
+    glm::vec4 pt(vec, homo ? 1 : 0);
+    pt = mat * pt;
+    if (homo) pt /= pt.w;
+    return glm::vec3(pt);
+}
+

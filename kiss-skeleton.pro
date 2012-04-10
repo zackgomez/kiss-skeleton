@@ -14,7 +14,8 @@ SOURCES       = glwidget.cpp \
                 kiss-skeleton.cpp \
                 zgfx.cpp \
                 mainwindow.cpp \
-                libgsm.cpp
+                libgsm.cpp \
+                meshops.cpp
 QT           += opengl
 LIBS         += -lGLEW -lzip
 

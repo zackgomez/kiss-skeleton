@@ -33,8 +33,6 @@ static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh,
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts);
 
-static glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &v, bool
-        homo = true);
 static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2,
         const glm::vec2 &pt);
 
@@ -1240,14 +1238,6 @@ void renderLine(const glm::mat4 &transform, const glm::vec3 &p0, const glm::vec3
     glVertex3fv(glm::value_ptr(p0));
     glVertex3fv(glm::value_ptr(p1));
     glEnd();
-}
-
-glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
-{
-    glm::vec4 pt(vec, homo ? 1 : 0);
-    pt = mat * pt;
-    if (homo) pt /= pt.w;
-    return glm::vec3(pt);
 }
 
 float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)

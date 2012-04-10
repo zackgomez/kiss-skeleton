@@ -78,5 +78,9 @@ GLuint  make_shader(GLenum type, const char *filename);
 shader* make_program(const char *vertfile, const char *fragfile);
 void    free_program(shader *s);
 
+// Utility functions
+glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &v,
+        bool homo = true);
 
 #endif
+
