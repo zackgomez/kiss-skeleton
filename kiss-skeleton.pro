@@ -7,7 +7,8 @@ HEADERS       = glwidget.h \
                 kiss-skeleton.h \
                 zgfx.h \
                 mainwindow.h \
-                libgsm.h
+                libgsm.h \
+                meshops.h
 SOURCES       = glwidget.cpp \
                 qtmain.cpp \
                 arcball.cpp \

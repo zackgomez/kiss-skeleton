@@ -9,6 +9,7 @@
 #include "Arcball.h"
 #include "kiss-skeleton.h"
 #include "libgsm.h"
+#include "meshops.h"
 
 const float GLWidget::ZOOM_SPEED = 2.f;
 const float GLWidget::WHEEL_ZOOM_SPEED = 1.1f;
@@ -187,6 +188,17 @@ void GLWidget::importBones()
 
 void GLWidget::autoSkinMesh()
 {
+    if (!rmesh || !skeleton)
+        return;
+
+    // TODO pop up a dialog here choosing method
+    
+    autoSkinMeshNearest(rmesh, skeleton);
+    // regenerate verts
+    free(verts);
+    verts = createSkinnedVertArray(rmesh, &nverts);
+
+    std::cout << "auto skinning complete\n";
 }
 
 void GLWidget::saveFile()

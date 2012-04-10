@@ -65,9 +65,10 @@ void autoSkinMeshNearest(rawmesh *rmesh, const Skeleton *skeleton)
     float *weights = rmesh->weights;
     for (size_t i = 0; i < rmesh->nverts; i++)
     {
+        printf("i: %zu\n", i);
         float bestdist = HUGE_VAL;
         size_t best = 0;
-        for (size_t j = 0; j < jointPos.size(); i++)
+        for (size_t j = 0; j < jointPos.size(); j++)
         {
             const glm::vec3 diff = jointPos[j] - glm::make_vec3(verts[i].pos);
             float dist = glm::dot(diff, diff);

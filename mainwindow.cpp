@@ -70,7 +70,7 @@ void MainWindow::createActions()
     autoSkinAct = new QAction(tr("Auto Skin"), this);
     //autoSkinAct->setShortcuts(QKeySequence(tr("Ctrl+")));
     autoSkinAct->setStatusTip(tr("Automatically skin the mesh"));
-    connect(autoSkinAct, SIGNAL(triggered()), glwidget, SLOT(autoSkin()));
+    connect(autoSkinAct, SIGNAL(triggered()), glwidget, SLOT(autoSkinMesh()));
     
     
     setKeyframe = new QAction(tr("Set &Keyframe"), this);
