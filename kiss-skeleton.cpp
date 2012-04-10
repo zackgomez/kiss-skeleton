@@ -16,13 +16,18 @@ Skeleton::Skeleton()
 
 Skeleton::~Skeleton()
 {
+    clearJoints();
+}
+
+void Skeleton::clearJoints()
+{
     // Clean up bone pointers
     for (size_t i = 0; i < joints_.size(); i++)
         delete joints_[i];
     joints_.clear();
 }
 
-void Skeleton::readJoint(const std::string &bonestr)
+int Skeleton::readJoint(const std::string &bonestr)
 {
     std::stringstream ss(bonestr);
     std::string name;
@@ -32,7 +37,7 @@ void Skeleton::readJoint(const std::string &bonestr)
     if (!ss)
     {
         std::cerr << "Could not read bone from string: '" << bonestr << "'\n";
-        exit(1);
+        return 1;
     }
 
     // Bone must either have a parent already read, or be the first, root bone
@@ -50,9 +55,11 @@ void Skeleton::readJoint(const std::string &bonestr)
     setWorldTransform(newbone);
 
     joints_.push_back(newbone);
+
+    return 0;
 }
 
-void Skeleton::readSkeleton(const std::string &filename)
+int Skeleton::readSkeleton(const std::string &filename)
 {
     std::ifstream file(filename.c_str());
 
@@ -60,15 +67,21 @@ void Skeleton::readSkeleton(const std::string &filename)
     while (std::getline(file, line))
     {
         if (line.empty())
-            continue;;
-        readJoint(line);
+            continue;
+        // Returns nonzero on error
+        if (readJoint(line))
+        {
+            clearJoints();
+            return -1;
+        }
     }
 
     // the read position is the bind position
     setBindPose();
+    return 0;
 }
 
-void Skeleton::readSkeleton(const char *text, size_t len)
+int Skeleton::readSkeleton(const char *text, size_t len)
 {
     std::stringstream file(std::string(text, len));
 
@@ -76,12 +89,17 @@ void Skeleton::readSkeleton(const char *text, size_t len)
     while (std::getline(file, line))
     {
         if (line.empty())
-            continue;;
-        readJoint(line);
+            continue;
+        if (readJoint(line))
+        {
+            clearJoints();
+            return -1;
+        }
     }
 
     // the read position is the bind position
     setBindPose();
+    return 0;
 }
 
 const std::vector<Joint*> Skeleton::getJoints() const

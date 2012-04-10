@@ -18,6 +18,7 @@ private slots:
 
 private:
     QMenu *fileMenu;
+    QMenu *importMenu;
     QMenu *skinningMenu;
     QMenu *animationMenu;
 
@@ -25,7 +26,8 @@ private:
     QAction *openAct;
     QAction *saveAct;
     QAction *saveAsAct;
-    QAction *importAct;
+    QAction *importModelAct;
+    QAction *importBonesAct;
     QAction *exportAct;
     QAction *closeAct;
     QAction *exitAct;

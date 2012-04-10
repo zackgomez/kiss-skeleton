@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include <cassert>
 
+static const char *BONES_FILE = "skeleton.bones";
+static const char *MESH_FILE  = "model.obj";
+
 // Struct declaration
 struct gsm
 {
@@ -59,22 +62,22 @@ void gsm_close(gsm *gsm)
 
 void *gsm_bones_contents(gsm *file, size_t &len)
 {
-    return zip_file_contents(file->archive, "skeleton.bones", len);
+    return zip_file_contents(file->archive, BONES_FILE, len);
 }
 
 void *gsm_mesh_contents(gsm *file, size_t &len)
 {
-    return zip_file_contents(file->archive, "model.obj", len);
+    return zip_file_contents(file->archive, MESH_FILE, len);
 }
 
 int gsm_set_bones(gsm *file, FILE *f)
 {
-    return zip_set_file(file->archive, "skeleton.bones", f);
+    return zip_set_file(file->archive, BONES_FILE, f);
 }
 
 int gsm_set_mesh(gsm *file, FILE *f)
 {
-    return zip_set_file(file->archive, "skeleton.bones", f);
+    return zip_set_file(file->archive, MESH_FILE, f);
 }
 
 void *zip_file_contents(struct zip *archive, const char *filename, size_t &len)

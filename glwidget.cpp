@@ -112,9 +112,18 @@ void GLWidget::openFile(const QString &path)
     if (data)
     {
         skeleton = new Skeleton();
-        skeleton->readSkeleton(data, len);
-        bindPose = skeleton->currentPose();
-        jointNDC.resize(skeleton->getJoints().size());
+        if (skeleton->readSkeleton(data, len))
+        {
+            free(skeleton);
+            skeleton = NULL;
+            QMessageBox::information(this, tr("Error read GSM File"),
+                    tr("Unable to parse bones file."));
+        }
+        if (skeleton)
+        {
+            bindPose = skeleton->currentPose();
+            jointNDC.resize(skeleton->getJoints().size());
+        }
         free(data);
     }
 
@@ -128,6 +137,27 @@ void GLWidget::openFile(const QString &path)
     currentFile = path;
 
     paintGL();
+}
+
+void GLWidget::importModel()
+{
+    QString filename = QFileDialog::getOpenFileName(this, tr("Import Model"),
+            ".", tr("OBJ Files (*.obj)"));
+
+    if (filename.isEmpty()) return;
+
+    bool skinned = true;
+    rawmesh *newmesh = loadRawMesh(filename.toAscii(), skinned);
+    if (!newmesh)
+        QMessageBox::information(this, tr("Unable to import mesh"),
+                tr("Couldn't parse mesh file"));
+
+    freeRawMesh(rmesh);
+    free(verts);
+    rmesh = newmesh;
+    verts = createSkinnedVertArray(rmesh, &nverts);
+
+    meshMode = skeleton && skinned ? POSING_MODE : SKINNING_MODE;
 }
 
 void GLWidget::saveFile()
@@ -158,6 +188,7 @@ void GLWidget::writeGSM(const QString &path)
 
     if (skeleton)
     {
+        std::cout << "writing skeleton\n";
         assert(bindPose);
         FILE *bonef = tmpfile();
         assert(bonef);
@@ -166,6 +197,7 @@ void GLWidget::writeGSM(const QString &path)
     }
     if (rmesh)
     {
+        std::cout << "writing mesh\n";
         FILE *meshf = tmpfile();
         assert(meshf);
         writeRawMesh(rmesh, meshf);

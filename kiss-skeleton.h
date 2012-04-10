@@ -38,8 +38,8 @@ public:
     Skeleton();
     ~Skeleton();
 
-    void readSkeleton(const std::string &filename);
-    void readSkeleton(const char *text, size_t len);
+    int readSkeleton(const std::string &filename);
+    int readSkeleton(const char *text, size_t len);
 
     const std::vector<Joint*> getJoints() const;
     const Joint* getJoint(const std::string &name) const;
@@ -61,7 +61,8 @@ private:
     std::vector<Joint*> joints_;
 
     void setWorldTransform(Joint* bone);
-    void readJoint(const std::string &jointstr);
+    int readJoint(const std::string &jointstr);
+    void clearJoints();
 };
 
 

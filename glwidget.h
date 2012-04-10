@@ -27,6 +27,7 @@ public slots:
     void newFile();
 // TODO no arg
     void openFile(const QString &path);
+    void importModel();
     void saveFile();
     void saveFileAs();
     void closeFile();

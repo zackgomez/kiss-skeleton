@@ -41,10 +41,15 @@ void MainWindow::createActions()
     saveAsAct->setStatusTip(tr("Save the current file with a different name"));
     connect(saveAsAct, SIGNAL(triggered()), glwidget, SLOT(saveFileAs()));
 
-    importAct = new QAction(tr("Import..."), this);
-    importAct->setShortcut(QKeySequence(tr("Ctrl+i")));
-    importAct->setStatusTip(tr("Import a resource"));
-    //connect(importAct, SIGNAL(triggered()), this, SLOT(import()));
+    importModelAct = new QAction(tr("Import .OBJ"), this);
+    importModelAct->setShortcut(QKeySequence(tr("Ctrl+i")));
+    importModelAct->setStatusTip(tr("Import a mesh file"));
+    connect(importModelAct, SIGNAL(triggered()), glwidget, SLOT(importModel()));
+
+    importBonesAct = new QAction(tr("Import .bones"), this);
+    importBonesAct->setShortcut(QKeySequence(tr("Ctrl+i")));
+    importBonesAct->setStatusTip(tr("Import a skeleton file"));
+    connect(importBonesAct, SIGNAL(triggered()), glwidget, SLOT(importBones()));
 
     exportAct = new QAction(tr("Export..."), this);
     exportAct->setShortcut(QKeySequence(tr("Ctrl+e")));
@@ -63,7 +68,7 @@ void MainWindow::createActions()
 
 
     autoSkinAct = new QAction(tr("Auto Skin"), this);
-    //autoSkinAct->setShortcuts(QKeySequence::Open);
+    //autoSkinAct->setShortcuts(QKeySequence(tr("Ctrl+")));
     autoSkinAct->setStatusTip(tr("Automatically skin the mesh"));
     connect(autoSkinAct, SIGNAL(triggered()), glwidget, SLOT(autoSkin()));
     
@@ -99,11 +104,14 @@ void MainWindow::createMenus()
     fileMenu->addAction(saveAct);
     fileMenu->addAction(saveAsAct);
     fileMenu->addSeparator();
-    fileMenu->addAction(importAct);
+    importMenu = fileMenu->addMenu(tr("&Import"));
     fileMenu->addAction(exportAct);
     fileMenu->addSeparator();
     fileMenu->addAction(closeAct);
     fileMenu->addAction(exitAct);
+
+    importMenu->addAction(importBonesAct);
+    importMenu->addAction(importModelAct);
 
     skinningMenu = menuBar()->addMenu(tr("&Skinning"));
     skinningMenu->addAction(autoSkinAct);
