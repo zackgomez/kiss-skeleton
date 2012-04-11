@@ -35,6 +35,8 @@ static void renderVisiblePoints(const glm::mat4 &transform, rawmesh *mesh,
         const glm::vec3 &pt);
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts);
+static void renderIntersectionMesh(const glm::mat4 &transform, const rawmesh *rmesh,
+        const glm::vec3 &a, const glm::vec3 &b);
 
 static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2,
         const glm::vec2 &pt);
@@ -316,9 +318,9 @@ void GLWidget::initializeGL()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    //shaderProgram = make_program("meshskin.v.glsl", "meshskin.f.glsl");
-    //if (!shaderProgram)
-        //exit(1);
+    shaderProgram = make_program("meshskin.v.glsl", "meshskin.f.glsl");
+    if (!shaderProgram)
+        exit(1);
 
     arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 }
@@ -351,14 +353,17 @@ void GLWidget::paintGL()
     // And the mesh
     if (meshMode == SKINNING_MODE)
     {
-        glColor3f(1.f, 1.f, 1.f);
-        renderPoints(viewMatrix, rmesh->verts, rmesh->nverts);
-
+        glDisable(GL_DEPTH_TEST);
         glColor4fv(glm::value_ptr(glm::vec4(ACTIVE_COLOR, 0.5f)));
         renderMesh(viewMatrix, verts, nverts);
 
+        glColor3f(1.f, 1.f, 1.f);
+        glLineWidth(1);
+        renderPoints(viewMatrix, rmesh->verts, rmesh->nverts);
+
         glColor3f(0,0,1);
-        renderVisiblePoints(viewMatrix, rmesh, glm::vec3(0, 0, 2));
+        renderVisiblePoints(viewMatrix, rmesh, glm::vec3(0, 5.0f, -1.15f));
+        glEnable(GL_DEPTH_TEST);
 
         if (selectedJoint)
         {
@@ -369,7 +374,8 @@ void GLWidget::paintGL()
     else if (meshMode == POSING_MODE)
     {
         //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        //renderSkinnedMesh(viewMatrix, verts, nverts, glm::vec4(0.7f));
+        renderSkinnedMesh(viewMatrix, verts, nverts,
+                glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
         //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
@@ -1149,7 +1155,9 @@ void GLWidget::renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8
     glVertexAttribPointer(weightAttrib,   4, GL_FLOAT,  GL_FALSE,
             sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, weights));
 
+    glDisable(GL_DEPTH_TEST);
     glDrawArrays(GL_TRIANGLES, 0, nverts);
+    glEnable(GL_DEPTH_TEST);
 
     glDisableVertexAttribArray(positionAttrib);
     glDisableVertexAttribArray(normalAttrib);
@@ -1250,6 +1258,7 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
         const glm::vec4 &color)
 {
     glLoadMatrixf(glm::value_ptr(transform));
+    glDisable(GL_DEPTH_TEST);
     const size_t nverts = mesh->nverts;
     const vert* verts = mesh->verts;
     const int* joints = mesh->joints;
@@ -1266,6 +1275,7 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
             }
     glEnd();
     glPointSize(1);
+    glEnable(GL_DEPTH_TEST);
 }
 
 void renderVisiblePoints(const glm::mat4 &transform, rawmesh *mesh,

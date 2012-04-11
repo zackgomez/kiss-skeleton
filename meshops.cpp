@@ -45,8 +45,6 @@ bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
 {
     // A point is visible to another point if the line between them does not 
     // intersect ANY triangles
-    const glm::vec3 raystart = pt;
-    const glm::vec3 raydir = refpt - pt;
 
     // Loop over all triangles, see if there is an intersection
     vert* verts = mesh->verts;
@@ -58,7 +56,7 @@ bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
         tri[1] = glm::make_vec3(verts[face.fverts[1].v].pos);
         tri[2] = glm::make_vec3(verts[face.fverts[2].v].pos);
 
-        if (rayIntersectsTriangle(raystart, raydir, tri))
+        if (segIntersectsTriangle(pt, refpt, tri) != glm::vec3(HUGE_VAL))
             return false;
     }
 
@@ -66,33 +64,37 @@ bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
     return true;
 }
 
-// Returns 't' of intersection, or -HUGE_VAL for no intersection
-bool rayIntersectsTriangle(const glm::vec3 &raystart, const glm::vec3 &raydir,
+// Returns intersection point or vec3(HUGE_VAL) for no intersection
+glm::vec3 segIntersectsTriangle(const glm::vec3 &seg0, const glm::vec3 &seg1,
         const glm::vec3 triangle[3])
 {
+    const glm::vec3 NO_INTERSECTION = glm::vec3(HUGE_VAL);
     // From http://softsurfer.com/Archive/algorithm_0105/algorithm_0105.htm#intersect_RayTriangle()
-    const float small_val = 0.001f;
+    const float small_val = 0.0001f;
 
+    const glm::vec3 raystart = seg0;
+    const glm::vec3 raydir = seg1 - seg0;
     glm::vec3 triu = triangle[1] - triangle[0];
     glm::vec3 triv = triangle[2] - triangle[0];
     glm::vec3 trinorm = glm::cross(triu, triv);
+    // Degenerate triangle
     if (trinorm == glm::vec3(0))
-        return false;
+        return NO_INTERSECTION;
 
-    // The ray and plane are coincident or parallel
-    // no intersection
-    float a = glm::dot(trinorm, raydir);
-    if (fabs(a) < small_val)
-        return false;
+    // check for parallel or coincident
+    if (fabs(glm::dot(trinorm, raydir)) < small_val)
+        return NO_INTERSECTION;
 
-    // Get intersect of ray and plane
-    const glm::vec3 w0 = raystart - triangle[0];
-    float b = -glm::dot(w0, trinorm);
+    // in P . N + d = 0 plane equation
+    float d = -glm::dot(trinorm, triangle[0]);
+    // time of intersection from :
+    // http://www.cs.princeton.edu/courses/archive/fall00/cs426/lectures/raycast/sld017.htm
+    float t = -(glm::dot(seg0, trinorm) + d) / glm::dot(raydir, trinorm);
 
-    // time of intersection with plane
-    float t = b / a;
-    if (t <= 0.f || t > 1.f)
-        return false;
+    // Check to make sure the intersected point is within our line segment
+    // if not, no intersection
+    if (t <= 0.f || t >= 1.f)
+        return NO_INTERSECTION;
 
     // intersection pt
     const glm::vec3 I = raystart + t * raydir;
@@ -113,10 +115,11 @@ bool rayIntersectsTriangle(const glm::vec3 &raystart, const glm::vec3 &raydir,
 
     // test for interior
     if (bu < 0 || bv < 0 || bu + bv > 1)
-        return false;
+        return NO_INTERSECTION;
 
+    std::cout << "collision at t = " << t << '\n';
     // Collision
-    return true;
+    return I;
 }
 
 
