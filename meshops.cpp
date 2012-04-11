@@ -45,6 +45,7 @@ int pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
 {
     // A point is visible to another point if the line between them does not 
     // intersect ANY triangles
+    const glm::vec3 endpt = refpt + (pt - refpt) * 0.99f;
 
     // Loop over all triangles, see if there is an intersection
     vert* verts = mesh->verts;
@@ -56,7 +57,7 @@ int pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
         tri[1] = glm::make_vec3(verts[face.fverts[1].v].pos);
         tri[2] = glm::make_vec3(verts[face.fverts[2].v].pos);
 
-        if (segIntersectsTriangle(pt, refpt, tri) != glm::vec3(HUGE_VAL))
+        if (segIntersectsTriangle(refpt, endpt, tri) != glm::vec3(HUGE_VAL))
             return i;
     }
 
@@ -116,7 +117,7 @@ glm::vec3 segIntersectsTriangle(const glm::vec3 &seg0, const glm::vec3 &seg1,
     // test for interior
     // This including of small value here handles the cases where the ray
     // intersects a vertex of the triangle
-    if (bu < 0 || bv < 0 || bu + bv > 1 - small_val)
+    if (bu < 0 || bv < 0 || bu + bv > 1)
         return NO_INTERSECTION;
 
     // Collision

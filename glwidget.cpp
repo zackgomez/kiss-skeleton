@@ -118,7 +118,7 @@ void GLWidget::openFile(const QString &path)
         {
             free(skeleton);
             skeleton = NULL;
-            QMessageBox::information(this, tr("Error read GSM File"),
+            QMessageBox::information(this, tr("Error reading GSM File"),
                     tr("Unable to parse bones file."));
         }
         if (skeleton)
@@ -320,7 +320,8 @@ void GLWidget::initializeGL()
 
     shaderProgram = make_program("meshskin.v.glsl", "meshskin.f.glsl");
     if (!shaderProgram)
-        exit(1);
+        QMessageBox::information(this, tr("Error loading resources"),
+                tr("Unable to compile skinning shader."));
 
     arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 }
@@ -375,8 +376,9 @@ void GLWidget::paintGL()
     else if (meshMode == POSING_MODE)
     {
         //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        renderSkinnedMesh(viewMatrix, verts, nverts,
-                glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
+        if (shaderProgram)
+            renderSkinnedMesh(viewMatrix, verts, nverts,
+                    glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
         //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
