@@ -3,7 +3,6 @@
 varying vec4 frag_pos;
 varying vec2 frag_texcoord;
 varying vec3 frag_norm;
-varying float frag_weight;
 uniform vec4 color;
 
 void main()

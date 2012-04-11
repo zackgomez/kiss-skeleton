@@ -196,7 +196,7 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
         const glm::vec3 vert = glm::make_vec3(verts[i].pos);
 
         float bestdist = HUGE_VAL;
-        size_t best = 0;
+        int best = -1;
         for (size_t j = 0; j < jointPos.size(); j++)
         {
             // If point is not visible to joint, can't bind!
@@ -216,7 +216,7 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
         joints[4*i + 1]  = 0;
         joints[4*i + 2]  = 0;
         joints[4*i + 3]  = 0;
-        weights[4*i + 0] = 1.f;
+        weights[4*i + 0] = best == -1 ? 0.f : 1.f;
         weights[4*i + 1] = 0.f;
         weights[4*i + 2] = 0.f;
         weights[4*i + 3] = 0.f;

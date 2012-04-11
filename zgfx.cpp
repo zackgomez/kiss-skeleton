@@ -93,11 +93,11 @@ rawmesh * readRawMesh(const char *contents, size_t len, bool &skinned)
                 // the first joint weight to 1 and others to 0
                 if (!extended)
                 {
-                    joints[4*verti + 0] = 0;
-                    joints[4*verti + 1] = 0;
-                    joints[4*verti + 2] = 0;
-                    joints[4*verti + 3] = 0;
-                    weights[4*verti + 0] = 1.f;
+                    joints[4*verti + 0] = -1;
+                    joints[4*verti + 1] = -1;
+                    joints[4*verti + 2] = -1;
+                    joints[4*verti + 3] = -1;
+                    weights[4*verti + 0] = 0.f;
                     weights[4*verti + 1] = 0.f;
                     weights[4*verti + 2] = 0.f;
                     weights[4*verti + 3] = 0.f;

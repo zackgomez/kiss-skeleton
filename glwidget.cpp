@@ -201,6 +201,10 @@ void GLWidget::autoSkinMesh()
     free(verts);
     verts = createSkinnedVertArray(rmesh, &nverts);
 
+    skeleton->setBindPose();
+    freeSkeletonPose(bindPose);
+    bindPose = skeleton->currentPose();
+
     std::cout << "auto skinning complete\n";
 }
 
