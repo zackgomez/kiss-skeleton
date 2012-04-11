@@ -167,18 +167,22 @@ rawmesh * readRawMesh(const char *contents, size_t len, bool &skinned)
 
 facevert parseFaceVert(const char *vdef)
 {
+    facevert fv;
     assert(vdef);
-    char buf[1024];
-    strncpy(buf, vdef, sizeof(buf));
-    char *saveptr;
 
-    // 1 indexed to 0 indexed
-    int v = atoi(strtok_r(buf, "/", &saveptr)) - 1;
-    int vn = atoi(strtok_r(NULL, "/", &saveptr)) - 1;
-    int vt = atoi(strtok_r(NULL, "/", &saveptr)) - 1;
-
-    facevert fv; fv.v = v; fv.vn = vn; fv.vt = vt;
-    return fv;
+    if (sscanf(vdef, "%d/%d/%d", &fv.v, &fv.vt, &fv.vn) == 3)
+    {
+        // 1 indexed to 0 indexed
+        fv.v -= 1; fv.vn -= 1; fv.vt -= 1;
+        return fv;
+    }
+    else if (sscanf(vdef, "%d//%d", &fv.v, &fv.vn) == 2)
+    {
+        fv.v -= 1; fv.vn -= 1; fv.vt = 0;
+        return fv;
+    }
+    else
+        assert(false && "unable to read unfull .obj");
 }
 
 void freeRawMesh(rawmesh *rmesh)

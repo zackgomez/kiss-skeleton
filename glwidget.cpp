@@ -195,9 +195,8 @@ void GLWidget::autoSkinMesh()
     if (!rmesh || !skeleton)
         return;
 
-    // TODO pop up a dialog here choosing method
-    
-    autoSkinMeshNearest(rmesh, skeleton);
+    // TODO display a QProgressDialog here
+    autoSkinMeshBest(rmesh, skeleton);
     // regenerate verts
     free(verts);
     verts = createSkinnedVertArray(rmesh, &nverts);
@@ -369,17 +368,17 @@ void GLWidget::paintGL()
                     //glm::vec4(0,1,0,1));
             glColor3f(0,0,1);
             glm::vec3 jointpos = applyMatrix(selectedJoint->worldTransform, glm::vec3(0, 0, 0));
-            renderVisiblePoints(viewMatrix, rmesh, jointpos, -1);
+            //renderVisiblePoints(viewMatrix, rmesh, jointpos, -1);
         }
         glEnable(GL_DEPTH_TEST);
     }
     else if (meshMode == POSING_MODE)
     {
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         if (shaderProgram)
             renderSkinnedMesh(viewMatrix, verts, nverts,
                     glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
     // render timeline
@@ -435,6 +434,8 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
 
 void GLWidget::mousePressEvent(QMouseEvent *event)
 {
+    if (dragging || translating || zooming || rotating)
+        return;
     glm::vec2 screenCoord = clickToScreenPos(
             event->x(), event->y());
 
@@ -742,6 +743,8 @@ void GLWidget::setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 {
     glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint->index].z);
     if (dragPos == glm::vec2(HUGE_VAL))
+        return;
+    if (dragStart == dragPos)
         return;
     glm::vec2 center(jointNDC[selectedJoint->index]);
 
@@ -1158,9 +1161,7 @@ void GLWidget::renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8
     glVertexAttribPointer(weightAttrib,   4, GL_FLOAT,  GL_FALSE,
             sizeof(vert_p4t2n3j8), (char*)verts + offsetof(vert_p4t2n3j8, weights));
 
-    glDisable(GL_DEPTH_TEST);
     glDrawArrays(GL_TRIANGLES, 0, nverts);
-    glEnable(GL_DEPTH_TEST);
 
     glDisableVertexAttribArray(positionAttrib);
     glDisableVertexAttribArray(normalAttrib);

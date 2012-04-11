@@ -172,7 +172,7 @@ void autoSkinMeshNearest(rawmesh *rmesh, const Skeleton *skeleton)
     }
 }
 
-void autoSkinMeshTwoNearest(rawmesh *rmesh, const Skeleton *skeleton)
+void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 {
     // Requires a mesh with skinning data
     assert(rmesh && rmesh->joints && rmesh->weights);
@@ -186,115 +186,42 @@ void autoSkinMeshTwoNearest(rawmesh *rmesh, const Skeleton *skeleton)
             jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
     }
 
-    // For each vertex, find the closest 2 joints and set weights according
+    // For each vertex, find the closest joint and bind only to that vertex
     // to distance
-    std::vector<float> dists;
     vert  *verts   = rmesh->verts;
     int   *joints  = rmesh->joints;
     float *weights = rmesh->weights;
     for (size_t i = 0; i < rmesh->nverts; i++)
     {
-        dists.assign(jointPos.size(), HUGE_VAL);
-        for (size_t j = 0; j < dists.size(); j++)
-        {
-            glm::vec3 v = glm::make_vec3(verts[i].pos);
-            dists[j] = glm::length(jointPos[j] - v);
-        }
+        const glm::vec3 vert = glm::make_vec3(verts[i].pos);
 
-        // only take best two
-        for (size_t j = 0; j < 2; j++)
+        float bestdist = HUGE_VAL;
+        size_t best = 0;
+        for (size_t j = 0; j < jointPos.size(); j++)
         {
-            // Find best joint/dist pair
-            float best = HUGE_VAL;
-            int bestk = -1;
-            for (size_t k = 0; k < dists.size(); k++)
+            // If point is not visible to joint, can't bind!
+            if (pointVisibleToPoint(jointPos[j], vert, rmesh) != -1)
+                continue;
+            const glm::vec3 diff = jointPos[j] - vert;
+            float dist = glm::dot(diff, diff);
+            if (dist < bestdist)
             {
-                if (dists[k] < best)
-                {
-                    best = dists[k];
-                    bestk = k;
-                }
+                bestdist = dist;
+                best = j;
             }
-
-            joints[4*i + j]  = bestk;
-            weights[4*i + j] = best;
-            dists[bestk] = HUGE_VAL;
         }
-        // Set the rest to 0
-        joints[4*i + 2] = 0;
-        joints[4*i + 3] = 0;
+
+        // Fill in best 1, 0 0, 0 0, 0 0
+        joints[4*i + 0]  = best;
+        joints[4*i + 1]  = 0;
+        joints[4*i + 2]  = 0;
+        joints[4*i + 3]  = 0;
+        weights[4*i + 0] = 1.f;
+        weights[4*i + 1] = 0.f;
         weights[4*i + 2] = 0.f;
         weights[4*i + 3] = 0.f;
 
-        // normalize weights
-        float sum = 0.f;
-        for (size_t j = 0; j < 4; j++)
-            sum += weights[4*i + j];
-        for (size_t j = 0; j < 4; j++)
-            if (weights[4*i + j] != 0.f)
-                weights[4*i + j] = 1 - (weights[4*i + j] / sum);
-    }
-}
-
-void autoSkinMeshEnvelope(rawmesh *rmesh, const Skeleton *skeleton)
-{
-    // Requires a mesh with skinning data
-    assert(rmesh && rmesh->joints && rmesh->weights);
-
-    // First get all the joint world positions for easy access
-    std::vector<glm::vec3> jointPos;
-    {
-        const std::vector<Joint*> joints = skeleton->getJoints();
-        jointPos = std::vector<glm::vec3>(joints.size());
-        for (size_t i = 0; i < joints.size(); i++)
-            jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
-    }
-
-    std::vector<float> dists;
-    vert  *verts   = rmesh->verts;
-    int   *joints  = rmesh->joints;
-    float *weights = rmesh->weights;
-    for (size_t i = 0; i < rmesh->nverts; i++)
-    {
-        dists.assign(jointPos.size(), HUGE_VAL);
-        for (size_t j = 0; j < dists.size(); j++)
-        {
-            glm::vec3 v = glm::make_vec3(verts[i].pos);
-            dists[j] = glm::length(jointPos[j] - v);
-        }
-
-        // only take best two
-        for (size_t j = 0; j < 2; j++)
-        {
-            // Find best joint/dist pair
-            float best = HUGE_VAL;
-            int bestk = -1;
-            for (size_t k = 0; k < dists.size(); k++)
-            {
-                if (dists[k] < best)
-                {
-                    best = dists[k];
-                    bestk = k;
-                }
-            }
-
-            joints[4*i + j]  = bestk;
-            weights[4*i + j] = best;
-            dists[bestk] = HUGE_VAL;
-        }
-        // Set the rest to 0
-        joints[4*i + 2] = 0;
-        joints[4*i + 3] = 0;
-        weights[4*i + 2] = 0.f;
-        weights[4*i + 3] = 0.f;
-
-        // normalize weights
-        float sum = 0.f;
-        for (size_t j = 0; j < 4; j++)
-            sum += weights[4*i + j];
-        for (size_t j = 0; j < 4; j++)
-            if (weights[4*i + j] != 0.f)
-                weights[4*i + j] = 1 - (weights[4*i + j] / sum);
+        printf("i: %zu / %zu\n", i + 1, rmesh->nverts);
     }
 }
 
