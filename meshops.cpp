@@ -38,11 +38,88 @@ add_neighbor(graph_node *node, graph_node *neighbor)
     node->neighbors[node->num_neighbors - 1] = neighbor;
 }
 
-graph *
-build_graph(const rawmesh *mesh)
+bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
+        const rawmesh *mesh)
 {
-    return NULL;
+    // A point is visible to another point if the line between them does not 
+    // intersect ANY triangles
+    const glm::vec3 raystart = pt;
+    const glm::vec3 raydir = glm::normalize(refpt - pt);
+    const float maxT = ((refpt - pt) / raydir).x;
+
+    // Loop over all triangles, see if there is an intersection
+    vert* verts = mesh->verts;
+    glm::vec3 tri[3];
+    for (size_t i = 0; i < mesh->nfaces; i++)
+    {
+        const fullface &face = mesh->ffaces[i];
+        tri[0] = glm::make_vec3(verts[face.fverts[0].v].pos);
+        tri[1] = glm::make_vec3(verts[face.fverts[1].v].pos);
+        tri[2] = glm::make_vec3(verts[face.fverts[2].v].pos);
+
+        float t = rayIntersectsTriangle(raystart, raydir, tri);
+        // intersect
+        if (t == -HUGE_VAL || t < maxT)
+            return false;
+    }
+
+    // Doesn't intersect any triangles
+    return true;
 }
+
+// Returns 't' of intersection, or -HUGE_VAL for no intersection
+float rayIntersectsTriangle(const glm::vec3 &raystart, const glm::vec3 &raydir,
+        const glm::vec3 triangle[3])
+{
+    // From http://softsurfer.com/Archive/algorithm_0105/algorithm_0105.htm#intersect_RayTriangle()
+    const float small_val = 0.001f;
+
+    glm::vec3 triu = triangle[1] - triangle[0];
+    glm::vec3 triv = triangle[2] - triangle[0];
+    glm::vec3 trinorm = glm::cross(triu, triv);
+    if (trinorm == glm::vec3(0))
+        return -HUGE_VAL;
+
+    // The ray and plane are coincident or parallel
+    // no intersection
+    float a = glm::dot(trinorm, raydir);
+    if (fabs(a) < small_val)
+        return -HUGE_VAL;
+
+    // Get intersect of ray and plane
+    const glm::vec3 w0 = raystart - triangle[0];
+    float b = -glm::dot(w0, trinorm);
+
+    // time of intersection with plane
+    float t = b / a;
+    if (t < 0.f)
+        return -HUGE_VAL;
+
+    // intersection pt
+    const glm::vec3 I = raystart + t * raydir;
+
+    // Use barycentric coordinates to test for I in triangle
+    // see http://www.blackpawn.com/texts/pointinpoly/default.html
+    float uu, uv, uw, vv, vw;
+    const glm::vec3 triw = I - triangle[0];
+    uu = glm::dot(triu, triu);
+    uv = glm::dot(triu, triv);
+    uw = glm::dot(triu, triw);
+    vv = glm::dot(triv, triv);
+    vw = glm::dot(triv, triw);
+
+    float invDenom = 1 / (uu * vv - uv * uv);
+    float bu = (vv * uw - uv * vw) * invDenom;
+    float bv = (uu * vw - uv * uw) * invDenom;
+
+    // test for interior
+    if (bu < 0 || bv < 0 || bu + bv > 1)
+        return -HUGE_VAL;
+
+    // Collision, return t
+    return t;
+}
+
 
 void autoSkinMeshNearest(rawmesh *rmesh, const Skeleton *skeleton)
 {
