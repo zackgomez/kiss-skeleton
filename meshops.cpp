@@ -2,6 +2,7 @@
 #include "zgfx.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <iostream>
 #include "kiss-skeleton.h"
 
 struct graph_node
@@ -45,8 +46,7 @@ bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
     // A point is visible to another point if the line between them does not 
     // intersect ANY triangles
     const glm::vec3 raystart = pt;
-    const glm::vec3 raydir = glm::normalize(refpt - pt);
-    const float maxT = ((refpt - pt) / raydir).x;
+    const glm::vec3 raydir = refpt - pt;
 
     // Loop over all triangles, see if there is an intersection
     vert* verts = mesh->verts;
@@ -58,9 +58,7 @@ bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
         tri[1] = glm::make_vec3(verts[face.fverts[1].v].pos);
         tri[2] = glm::make_vec3(verts[face.fverts[2].v].pos);
 
-        float t = rayIntersectsTriangle(raystart, raydir, tri);
-        // intersect
-        if (t == -HUGE_VAL || t < maxT)
+        if (rayIntersectsTriangle(raystart, raydir, tri))
             return false;
     }
 
@@ -69,7 +67,7 @@ bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
 }
 
 // Returns 't' of intersection, or -HUGE_VAL for no intersection
-float rayIntersectsTriangle(const glm::vec3 &raystart, const glm::vec3 &raydir,
+bool rayIntersectsTriangle(const glm::vec3 &raystart, const glm::vec3 &raydir,
         const glm::vec3 triangle[3])
 {
     // From http://softsurfer.com/Archive/algorithm_0105/algorithm_0105.htm#intersect_RayTriangle()
@@ -79,13 +77,13 @@ float rayIntersectsTriangle(const glm::vec3 &raystart, const glm::vec3 &raydir,
     glm::vec3 triv = triangle[2] - triangle[0];
     glm::vec3 trinorm = glm::cross(triu, triv);
     if (trinorm == glm::vec3(0))
-        return -HUGE_VAL;
+        return false;
 
     // The ray and plane are coincident or parallel
     // no intersection
     float a = glm::dot(trinorm, raydir);
     if (fabs(a) < small_val)
-        return -HUGE_VAL;
+        return false;
 
     // Get intersect of ray and plane
     const glm::vec3 w0 = raystart - triangle[0];
@@ -93,8 +91,8 @@ float rayIntersectsTriangle(const glm::vec3 &raystart, const glm::vec3 &raydir,
 
     // time of intersection with plane
     float t = b / a;
-    if (t < 0.f)
-        return -HUGE_VAL;
+    if (t <= 0.f || t > 1.f)
+        return false;
 
     // intersection pt
     const glm::vec3 I = raystart + t * raydir;
@@ -115,10 +113,10 @@ float rayIntersectsTriangle(const glm::vec3 &raystart, const glm::vec3 &raydir,
 
     // test for interior
     if (bu < 0 || bv < 0 || bu + bv > 1)
-        return -HUGE_VAL;
+        return false;
 
-    // Collision, return t
-    return t;
+    // Collision
+    return true;
 }
 
 

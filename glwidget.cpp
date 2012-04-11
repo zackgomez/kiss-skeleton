@@ -31,6 +31,8 @@ static void renderLine(const glm::mat4 &transform,
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
 static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh,
         int joint, const glm::vec4 &color);
+static void renderVisiblePoints(const glm::mat4 &transform, rawmesh *mesh,
+        const glm::vec3 &pt);
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts);
 
@@ -314,9 +316,9 @@ void GLWidget::initializeGL()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    shaderProgram = make_program("meshskin.v.glsl", "meshskin.f.glsl");
-    if (!shaderProgram)
-        exit(1);
+    //shaderProgram = make_program("meshskin.v.glsl", "meshskin.f.glsl");
+    //if (!shaderProgram)
+        //exit(1);
 
     arcball = new Arcball(glm::vec3(0, 0, -20), 20.f, 1.f, 0.1f, 1000.f, 50.f);
 }
@@ -355,6 +357,9 @@ void GLWidget::paintGL()
         glColor4fv(glm::value_ptr(glm::vec4(ACTIVE_COLOR, 0.5f)));
         renderMesh(viewMatrix, verts, nverts);
 
+        glColor3f(0,0,1);
+        renderVisiblePoints(viewMatrix, rmesh, glm::vec3(0, 0, 2));
+
         if (selectedJoint)
         {
             renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
@@ -363,9 +368,9 @@ void GLWidget::paintGL()
     }
     else if (meshMode == POSING_MODE)
     {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        renderSkinnedMesh(viewMatrix, verts, nverts, glm::vec4(0.7f));
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        //renderSkinnedMesh(viewMatrix, verts, nverts, glm::vec4(0.7f));
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
     // render timeline
@@ -1259,6 +1264,37 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
                 glColor4fv(glm::value_ptr(color * weights[4*i+j]));
                 glVertex4fv(verts[i].pos);
             }
+    glEnd();
+    glPointSize(1);
+}
+
+void renderVisiblePoints(const glm::mat4 &transform, rawmesh *mesh,
+        const glm::vec3 &pt)
+{
+    glLoadMatrixf(glm::value_ptr(transform));
+    const size_t nverts = mesh->nverts;
+    const vert* verts = mesh->verts;
+    const int* joints = mesh->joints;
+    const float* weights = mesh->weights;
+
+    glColor3f(0, 1, 0);
+    glPointSize(10);
+    glBegin(GL_POINTS);
+    glVertex3fv(glm::value_ptr(pt));
+    glEnd();
+
+    glPointSize(5);
+    glColor3f(1, 0, 1);
+    glBegin(GL_POINTS);
+    for (size_t i = 0; i < nverts; i++)
+    {
+        glm::vec3 vert = glm::make_vec3(verts[i].pos);
+        if (pointVisibleToPoint(pt, vert, mesh))
+        {
+            std::cout << "rendering visible point " << vert << '\n';
+            glVertex4fv(verts[i].pos);
+        }
+    }
     glEnd();
     glPointSize(1);
 }
