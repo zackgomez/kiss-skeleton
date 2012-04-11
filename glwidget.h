@@ -68,6 +68,7 @@ private:
     int windowWidth, windowHeight, timelineHeight;
     SkeletonPose *bindPose;
     const Joint* selectedJoint;
+
     int skeletonMode, meshMode, editMode;
     bool localMode;
 

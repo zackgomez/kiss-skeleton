@@ -40,7 +40,7 @@ add_neighbor(graph_node *node, graph_node *neighbor)
     node->neighbors[node->num_neighbors - 1] = neighbor;
 }
 
-bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
+int pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
         const rawmesh *mesh)
 {
     // A point is visible to another point if the line between them does not 
@@ -57,11 +57,11 @@ bool pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
         tri[2] = glm::make_vec3(verts[face.fverts[2].v].pos);
 
         if (segIntersectsTriangle(pt, refpt, tri) != glm::vec3(HUGE_VAL))
-            return false;
+            return i;
     }
 
     // Doesn't intersect any triangles
-    return true;
+    return -1;
 }
 
 // Returns intersection point or vec3(HUGE_VAL) for no intersection
@@ -114,10 +114,11 @@ glm::vec3 segIntersectsTriangle(const glm::vec3 &seg0, const glm::vec3 &seg1,
     float bv = (uu * vw - uv * uw) * invDenom;
 
     // test for interior
-    if (bu < 0 || bv < 0 || bu + bv > 1)
+    // This including of small value here handles the cases where the ray
+    // intersects a vertex of the triangle
+    if (bu < 0 || bv < 0 || bu + bv > 1 - small_val)
         return NO_INTERSECTION;
 
-    std::cout << "collision at t = " << t << '\n';
     // Collision
     return I;
 }

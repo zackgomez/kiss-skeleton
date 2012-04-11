@@ -32,7 +32,7 @@ static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts)
 static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh,
         int joint, const glm::vec4 &color);
 static void renderVisiblePoints(const glm::mat4 &transform, rawmesh *mesh,
-        const glm::vec3 &pt);
+        const glm::vec3 &pt, int selectedVert);
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts);
 static void renderIntersectionMesh(const glm::mat4 &transform, const rawmesh *rmesh,
@@ -361,15 +361,16 @@ void GLWidget::paintGL()
         glLineWidth(1);
         renderPoints(viewMatrix, rmesh->verts, rmesh->nverts);
 
-        glColor3f(0,0,1);
-        renderVisiblePoints(viewMatrix, rmesh, glm::vec3(0, 5.0f, -1.15f));
-        glEnable(GL_DEPTH_TEST);
 
         if (selectedJoint)
         {
-            renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
-                    glm::vec4(0,1,0,1));
+            //renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
+                    //glm::vec4(0,1,0,1));
+            glColor3f(0,0,1);
+            glm::vec3 jointpos = applyMatrix(selectedJoint->worldTransform, glm::vec3(0, 0, 0));
+            renderVisiblePoints(viewMatrix, rmesh, jointpos, -1);
         }
+        glEnable(GL_DEPTH_TEST);
     }
     else if (meshMode == POSING_MODE)
     {
@@ -469,7 +470,7 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
             else if (event->modifiers() == Qt::SHIFT)
                 translating = true;
         }
-        // Right mouse selects and deselects bones
+        // Right mouse selects and deselects joints/points
         else if (event->button() == Qt::RightButton)
         {
             selectedJoint = NULL;
@@ -1279,7 +1280,7 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
 }
 
 void renderVisiblePoints(const glm::mat4 &transform, rawmesh *mesh,
-        const glm::vec3 &pt)
+        const glm::vec3 &pt, int selectedVert)
 {
     glLoadMatrixf(glm::value_ptr(transform));
     const size_t nverts = mesh->nverts;
@@ -1294,15 +1295,39 @@ void renderVisiblePoints(const glm::mat4 &transform, rawmesh *mesh,
     glEnd();
 
     glPointSize(5);
-    glColor3f(1, 0, 1);
     glBegin(GL_POINTS);
     for (size_t i = 0; i < nverts; i++)
     {
         glm::vec3 vert = glm::make_vec3(verts[i].pos);
-        if (pointVisibleToPoint(pt, vert, mesh))
+        int intersectingFace = pointVisibleToPoint(pt, vert, mesh);
+        if (intersectingFace == -1)
         {
-            std::cout << "rendering visible point " << vert << '\n';
+            //std::cout << "rendering visible point " << vert << '\n';
+            glColor3f(1, 0, 1);
             glVertex4fv(verts[i].pos);
+        }
+        else if (i == selectedVert && intersectingFace != -1)
+        {
+            std::cout << "rendering intersection tri\n";
+            glm::vec3 tri[3];
+            tri[0] = glm::make_vec3(mesh->verts[mesh->ffaces[intersectingFace].fverts[0].v].pos);
+            tri[1] = glm::make_vec3(mesh->verts[mesh->ffaces[intersectingFace].fverts[1].v].pos);
+            tri[2] = glm::make_vec3(mesh->verts[mesh->ffaces[intersectingFace].fverts[2].v].pos);
+            glm::vec3 intersectionPt = segIntersectsTriangle(pt, vert, tri);
+            std::cout << "vert: " << vert << "  intersection: " << intersectionPt << '\n';
+            std::cout << "t: " << (intersectionPt - pt) / (vert - pt) << '\n';
+            std::cout << "vert == intersection? " << (vert == intersectionPt) << 
+                "  " << intersectionPt - vert << '\n';
+
+            glEnd();
+            glColor4f(1, 0, 0, 0.5f);
+            glBegin(GL_TRIANGLES);
+            glVertex4fv(mesh->verts[mesh->ffaces[intersectingFace].fverts[0].v].pos);
+            glVertex4fv(mesh->verts[mesh->ffaces[intersectingFace].fverts[1].v].pos);
+            glVertex4fv(mesh->verts[mesh->ffaces[intersectingFace].fverts[2].v].pos);
+            glEnd();
+            glBegin(GL_POINTS);
+
         }
     }
     glEnd();
