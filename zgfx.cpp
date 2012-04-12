@@ -437,6 +437,63 @@ void *file_contents(const char *filename, GLint *length)
     return buffer;
 }
 
+std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
+{
+    os << v.x << ' ' << v.y;
+    return os;
+}
+
+std::ostream& operator<< (std::ostream& os, const glm::vec3 &v)
+{
+    os << v.x << ' ' << v.y << ' ' << v.z;
+    return os;
+}
+
+std::ostream& operator<< (std::ostream& os, const glm::vec4 &v)
+{
+    os << v.x << ' ' << v.y << ' ' << v.z << ' ' << v.w;
+    return os;
+}
+
+std::ostream& operator<< (std::ostream& os, const glm::quat &v)
+{
+    os << v.x << ' ' << v.y << ' ' << v.z << ' ' << v.w;
+    return os;
+}
+
+glm::quat axisAngleToQuat(const glm::vec4 &a)
+{
+    /* 
+     * qx = ax * sin(angle/2)
+     * qy = ay * sin(angle/2)
+     * qz = az * sin(angle/2)
+     * qw = cos(angle/2)
+     */
+
+    float angle = M_PI/180.f * a.w;
+    float sina = sinf(angle/2.f);
+    float cosa = cosf(angle/2.f);
+
+    // CAREFUL: w, x, y, z
+    return glm::quat(cosa, a.x * sina, a.y * sina, a.z * sina);
+}
+
+glm::vec4 quatToAxisAngle(const glm::quat &q)
+{
+    float angle = 2.f * acosf(q.w);
+    float sina2 = sinf(angle/2.f);
+    angle *= 180.f/M_PI;
+
+    if (sina2 == 0.f)
+        return glm::vec4(0, 0, 1, angle);
+
+    return glm::vec4(
+            q.x / sina2,
+            q.y / sina2,
+            q.z / sina2,
+            angle);
+}
+
 glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
 {
     glm::vec4 pt(vec, homo ? 1 : 0);

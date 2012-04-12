@@ -41,13 +41,6 @@ static void renderIntersectionMesh(const glm::mat4 &transform, const rawmesh *rm
 static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2,
         const glm::vec2 &pt);
 
-static glm::quat axisAngleToQuat(const glm::vec4 &a);
-static glm::vec4 quatToAxisAngle(const glm::quat &q);
-static std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
-static std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
-static std::ostream& operator<< (std::ostream& os, const glm::vec4 &v);
-static std::ostream& operator<< (std::ostream& os, const glm::quat &v);
-
 GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
     timelineHeight(200),
@@ -57,16 +50,21 @@ GLWidget::GLWidget(QWidget *parent) :
     editMode(ROTATION_MODE),
     localMode(false),
     dragging(false),
-    rotating(false), translating(false), zooming(false),
-    // timeline vars
-    startFrame(1), endFrame(60), currentFrame(1),
-    play(false)
+    rotating(false), translating(false), zooming(false)
 {
     skeleton = NULL;
     bindPose = NULL;
+    copiedPose = NULL;
 
     rmesh = NULL;
     verts = NULL;
+
+    // timeline vars
+    tdata_ = new timeline_data();
+    tdata_->startFrame = 1;
+    tdata_->endFrame = 60;
+    tdata_->currentFrame = 1;
+    tdisplay_ = new TimelineDisplay(this, tdata_);
 }
 
 GLWidget::~GLWidget()
@@ -282,19 +280,20 @@ void GLWidget::closeFile()
 void GLWidget::setKeyframe()
 {
     if (skeleton == NULL) return;
-    keyframes[currentFrame] = skeleton->currentPose();
+    tdata_->keyframes[tdata_->currentFrame] = skeleton->currentPose();
     updateGL();
 }
 
 void GLWidget::deleteKeyframe()
 {
-    keyframes.erase(currentFrame);
+    tdata_->keyframes.erase(tdata_->currentFrame);
     updateGL();
 }
 
 void GLWidget::copyPose()
 {
     if (skeleton == NULL) return;
+    delete copiedPose;
     copiedPose = skeleton->currentPose();
     updateGL();
 }
@@ -386,14 +385,14 @@ void GLWidget::paintGL()
     }
 
     // render timeline
-    glViewport(0, 0, windowWidth, timelineHeight);
-    renderTimeline();
+    tdisplay_->render();
 }
 
 void GLWidget::resizeGL(int width, int height)
 {
     windowWidth = width;
     windowHeight = height;
+    tdisplay_->setViewport(0, 0, windowWidth, timelineHeight);
 }
 
 void GLWidget::keyPressEvent(QKeyEvent *e)
@@ -440,12 +439,18 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
 {
     if (dragging || translating || zooming || rotating)
         return;
-    glm::vec2 screenCoord = clickToScreenPos(
-            event->x(), event->y());
-
-    // Handle main window events
-    if (event->y() < windowHeight - timelineHeight)
+    int x = event->x(), y = -event->y();
+    // Timeline events
+    if (tdisplay_->contains(x, y))
     {
+        std::cout << "timeline press event\n";
+        tdisplay_->mousePressEvent(event);
+    }
+    // Handle main window events
+    else 
+    {
+        assert(y < windowHeight - timelineHeight);
+        glm::vec2 screenCoord = clickToScreenPos(x, y);
         // Left button possibly starts an edit
         if (event->button() == Qt::LeftButton && !dragging)
         {
@@ -493,24 +498,6 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
                     selectedJoint = skeleton->getJoint(i);
                     nearest = ndc.z;
                 }
-            }
-        }
-    }
-    // Handle timeline actions
-    else
-    {
-        glm::vec2 timelineCoord(screenCoord.x,
-                (windowHeight - event->y()) / (float) timelineHeight);
-        std::cout << "timeline action @ " << timelineCoord << '\n';
-        if (event->button() == Qt::LeftButton)
-        {
-            if (timelineCoord.y > 0.25f && timelineCoord.y < 0.75f)
-            {
-                int newFrame = startFrame + (event->x() * (endFrame - startFrame + 2) + windowWidth * 0.5f) / windowWidth - 1;
-                if (newFrame < startFrame) newFrame = startFrame;
-                if (newFrame > endFrame) newFrame = endFrame;
-                setFrame(newFrame);
-                std::cout << "Selected frame " << currentFrame << std::endl;
             }
         }
     }
@@ -782,31 +769,31 @@ void GLWidget::setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 
 void GLWidget::setPoseFromFrame(int frame)
 {
-    if (keyframes.count(frame) > 0)
+    if (tdata_->keyframes.count(frame) > 0)
     {
-        skeleton->setPose(keyframes[frame]);
+        skeleton->setPose(tdata_->keyframes[frame]);
     } 
-    else if (keyframes.size() > 1)
+    else if (tdata_->keyframes.size() > 1)
     {
-        int lastKeyframe = currentFrame;
-        int nextKeyframe = currentFrame;
-        while (keyframes.count(lastKeyframe) == 0 && lastKeyframe > startFrame)
+        int lastKeyframe = tdata_->currentFrame;
+        int nextKeyframe = tdata_->currentFrame;
+        while (tdata_->keyframes.count(lastKeyframe) == 0 && lastKeyframe > tdata_->startFrame)
             lastKeyframe--;
-        while (keyframes.count(nextKeyframe) == 0 && nextKeyframe < endFrame)
+        while (tdata_->keyframes.count(nextKeyframe) == 0 && nextKeyframe < tdata_->endFrame)
             nextKeyframe++;
-        if (keyframes.count(lastKeyframe) == 0)
+        if (tdata_->keyframes.count(lastKeyframe) == 0)
             lastKeyframe = nextKeyframe;
-        if (keyframes.count(nextKeyframe) == 0)
+        if (tdata_->keyframes.count(nextKeyframe) == 0)
             nextKeyframe = lastKeyframe;
         
         // The normalized position of the current frame between the keyframes
         float anim = 0.f;
         if (nextKeyframe - lastKeyframe > 0)
-            anim = float(currentFrame - lastKeyframe) / (nextKeyframe - lastKeyframe);
+            anim = float(tdata_->currentFrame - lastKeyframe) / (nextKeyframe - lastKeyframe);
 
-		assert(keyframes.count(lastKeyframe) && keyframes.count(nextKeyframe));
-		const SkeletonPose *last = keyframes[lastKeyframe];
-		const SkeletonPose *next = keyframes[nextKeyframe];
+		assert(tdata_->keyframes.count(lastKeyframe) && tdata_->keyframes.count(nextKeyframe));
+		const SkeletonPose *last = tdata_->keyframes[lastKeyframe];
+		const SkeletonPose *next = tdata_->keyframes[nextKeyframe];
 		assert(last->poses.size() == next->poses.size());
 
 		SkeletonPose* pose = new SkeletonPose;
@@ -826,7 +813,7 @@ void GLWidget::setPoseFromFrame(int frame)
             float endScale = next->poses[i]->scale;
             jp->scale = startScale + (endScale - startScale) * anim;
         }
-        
+
         skeleton->setPose(pose);
 		freeSkeletonPose(pose);
     }
@@ -834,65 +821,18 @@ void GLWidget::setPoseFromFrame(int frame)
 
 void GLWidget::setFrame(int frame)
 {
-    currentFrame = frame;
+    tdata_->currentFrame = frame;
     setPoseFromFrame(frame);
     updateGL();
 }
 
 void GLWidget::update()
 {
-    if (currentFrame == endFrame)
-        setFrame(startFrame);
+    // TODO Couldn't this be done with a mod?
+    if (tdata_->currentFrame == tdata_->endFrame)
+        setFrame(tdata_->startFrame);
     else
-        setFrame(currentFrame + 1);
-}
-
-void GLWidget::renderTimeline()
-{
-    // Render in NDC coordinates, no projection matrix needed
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-    glBegin(GL_LINES);
-    for(int i = startFrame; i <= endFrame; i++)
-    {
-        // Highlight current frame red
-        if (i == currentFrame)
-            glColor3f(1.0f, 0.f, 0.f);
-        else
-            glColor3f(1.0f, 1.0f, 1.0f);
-        if (keyframes.count(i) > 0)
-            glColor3f(1.0f, 1.0f, 0.0f);
-            glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 2), 0.5f, 0);
-            glVertex3f(-1.0f + 2.f * i / (endFrame - startFrame + 2), -0.5f, 0);
-    }
-    glEnd();
-
-    // Foreground
-    glColor3f(0.5f, 0.5f, 0.5f);
-    glBegin(GL_QUADS);
-        glVertex3f(-1, 0.5f, 0);
-        glVertex3f(-1, -0.5f, 0);
-        glVertex3f(1, -0.5f, 0);
-        glVertex3f(1, 0.5f, 0);
-    glEnd();
-
-    // Background Color
-    glColor3f(0.25f, 0.25f, 0.25f);
-    glBegin(GL_QUADS);
-        glVertex3f(-1, 1, 0);
-        glVertex3f(-1, -1, 0);
-        glVertex3f(1, -1, 0);
-        glVertex3f(1, 1, 0);
-    glEnd();
-
-    // Fix matrices
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
+        setFrame(tdata_->currentFrame + 1);
 }
 
 void GLWidget::renderEditGrid() const
@@ -1190,7 +1130,6 @@ glm::vec2 GLWidget::clickToScreenPos(int x, int y) const
     glm::vec2 screencoord((float)x / windowWidth, (float)y / (windowHeight - timelineHeight));
     screencoord -= glm::vec2(0.5f);
     screencoord *= 2.f;
-    screencoord.y = -screencoord.y;
 
     return screencoord;
 }
@@ -1374,63 +1313,5 @@ float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &p
     glm::vec2 intersect = p1 + u * (p2 - p1);
     
     return glm::length(pt - intersect);
-}
-
-std::ostream& operator<< (std::ostream& os, const glm::vec2 &v)
-{
-    os << v.x << ' ' << v.y;
-    return os;
-}
-
-std::ostream& operator<< (std::ostream& os, const glm::vec3 &v)
-{
-    os << v.x << ' ' << v.y << ' ' << v.z;
-    return os;
-}
-
-std::ostream& operator<< (std::ostream& os, const glm::vec4 &v)
-{
-    os << v.x << ' ' << v.y << ' ' << v.z << ' ' << v.w;
-    return os;
-}
-
-std::ostream& operator<< (std::ostream& os, const glm::quat &v)
-{
-    os << v.x << ' ' << v.y << ' ' << v.z << ' ' << v.w;
-    return os;
-}
-
-// Quaternion operations follow...
-glm::quat axisAngleToQuat(const glm::vec4 &a)
-{
-    /* 
-     * qx = ax * sin(angle/2)
-     * qy = ay * sin(angle/2)
-     * qz = az * sin(angle/2)
-     * qw = cos(angle/2)
-     */
-
-    float angle = M_PI/180.f * a.w;
-    float sina = sinf(angle/2.f);
-    float cosa = cosf(angle/2.f);
-
-    // CAREFUL: w, x, y, z
-    return glm::quat(cosa, a.x * sina, a.y * sina, a.z * sina);
-}
-
-glm::vec4 quatToAxisAngle(const glm::quat &q)
-{
-    float angle = 2.f * acosf(q.w);
-    float sina2 = sinf(angle/2.f);
-    angle *= 180.f/M_PI;
-
-    if (sina2 == 0.f)
-        return glm::vec4(0, 0, 1, angle);
-
-    return glm::vec4(
-            q.x / sina2,
-            q.y / sina2,
-            q.z / sina2,
-            angle);
 }
 

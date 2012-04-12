@@ -1,9 +1,9 @@
 #include "meshops.h"
-#include "zgfx.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include "kiss-skeleton.h"
+#include "zgfx.h"
 
 struct graph_node
 {

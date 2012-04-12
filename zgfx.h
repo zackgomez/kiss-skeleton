@@ -3,7 +3,9 @@
 
 #include <GL/glew.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <cstdio>
+#include <iostream>
 
 struct vert
 {
@@ -78,9 +80,14 @@ GLuint  make_shader(GLenum type, const char *filename);
 shader* make_program(const char *vertfile, const char *fragfile);
 void    free_program(shader *s);
 
-// Utility functions
-glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &v,
-        bool homo = true);
+// utility functions
+std::ostream& operator<< (std::ostream& os, const glm::vec2 &v);
+std::ostream& operator<< (std::ostream& os, const glm::vec3 &v);
+std::ostream& operator<< (std::ostream& os, const glm::vec4 &v);
+std::ostream& operator<< (std::ostream& os, const glm::quat &q);
+glm::quat axisAngleToQuat(const glm::vec4 &a);
+glm::vec4 quatToAxisAngle(const glm::quat &q);
+glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo = false);
 
 #endif
 

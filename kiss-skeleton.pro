@@ -8,7 +8,8 @@ HEADERS       = glwidget.h \
                 zgfx.h \
                 mainwindow.h \
                 libgsm.h \
-                meshops.h
+                meshops.h \
+                glsubdisplay.h
 SOURCES       = glwidget.cpp \
                 qtmain.cpp \
                 arcball.cpp \
@@ -16,7 +17,8 @@ SOURCES       = glwidget.cpp \
                 zgfx.cpp \
                 mainwindow.cpp \
                 libgsm.cpp \
-                meshops.cpp
+                meshops.cpp \
+                glsubdisplay.cpp
 QT           += opengl
 LIBS         += -lGLEW -lzip
 

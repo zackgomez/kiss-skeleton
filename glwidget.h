@@ -7,6 +7,7 @@
 #include <map>
 #include "Arcball.h"
 #include "zgfx.h"
+#include "glsubdisplay.h"
 
 class Arcball;
 class Skeleton;
@@ -66,7 +67,7 @@ private:
     QString currentFile;
 
     int windowWidth, windowHeight, timelineHeight;
-    SkeletonPose *bindPose;
+    SkeletonPose *bindPose, *copiedPose;
     const Joint* selectedJoint;
 
     int skeletonMode, meshMode, editMode;
@@ -77,6 +78,10 @@ private:
     glm::vec3 axisNDC[3];
     glm::vec3 axisDir[3];
     glm::vec3 circleNDC;
+
+    // timeline ui vars
+    QTimer *animTimer;
+    bool play;
 
     // UI state vars
     bool dragging;
@@ -89,11 +94,8 @@ private:
     float startingScale;
 
     // Timeline vars
-    int startFrame, endFrame, currentFrame;
-    std::map<int, SkeletonPose*> keyframes;
-    QTimer *animTimer;
-    SkeletonPose *copiedPose;
-    bool play;
+    timeline_data *tdata_;
+    TimelineDisplay *tdisplay_;
 
     // Skeleton editing functions
     void setTranslationVec(const glm::vec2 &clickPos);
@@ -107,7 +109,6 @@ private:
     void setFrame(int frame);
 
     // Rendering helpers
-    void renderTimeline();
     void renderEditGrid() const;
     void renderJoint(const glm::mat4 &transform, const Joint *joint,
             const std::vector<Joint*> joints);
