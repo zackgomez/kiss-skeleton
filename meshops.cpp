@@ -184,6 +184,8 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     for (size_t i = 0; i < skeljoints.size(); i++)
         jointPos[i] = applyMatrix(skeljoints[i]->worldTransform, glm::vec3(0.f));
 
+    std::vector<float> jointScores;
+
     // For each vertex, find the closest joint and bind only to that vertex
     // to distance
     vert  *verts   = rmesh->verts;
@@ -191,14 +193,17 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     float *weights = rmesh->weights;
     for (size_t i = 0; i < rmesh->nverts; i++)
     {
+        // cache vert position
         const glm::vec3 vert = glm::make_vec3(verts[i].pos);
+        // Reset joint scores
+        jointScores.assign(jointPos.size(), -HUGE_VAL);
 
-        float bestdist = HUGE_VAL;
-        int best = -1;
+        // fill in the weights
         for (size_t j = 0; j < jointPos.size(); j++)
         {
             // points defining the bone line
             glm::vec3 p0, p1;
+            glm::vec3 pdir = glm::normalize(p1 - p0); // a^i (direction of bone)
             int targetJoint = -1;
             // Figure out the end points of the bone
             if (skeljoints[j]->parent == Skeleton::ROOT_PARENT)
@@ -208,35 +213,51 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
             p0 = jointPos[targetJoint];
             p1 = jointPos[j];
 
-            float dist2 = HUGE_VAL;
-            const int nsegments = 10;
-            bool seen = false;
-            for (float lambda = 0; lambda <= 1.f; lambda += 1.f/nsegments)
+            // Calculate the integral
+            float score = 0.f;
+            const float dlambda = 0.1f;
+            for (float lambda = 0; lambda <= 1.f; lambda += dlambda)
             {
+                // current point along bone (b^i_\lambda)
                 glm::vec3 cur = lambda * (p1 - p0) + p0;
+                // Direction from point to vert (d^i_\lambda)
+                glm::vec3 dir = vert - cur;
+                float mag2 = glm::dot(dir, dir);
+                dir /= mag2 * mag2;
+                // visibility test, term goes to zero if not visible
                 if (pointVisibleToPoint(jointPos[j], vert, rmesh) != -1) continue;
-                seen = true;
-                glm::vec3 diff = cur - vert;
-                float cdist = glm::dot(diff, diff);
-                dist2 = cdist < dist2 ? cdist : dist2;
-            }
-            if (!seen)
-                continue;
 
-            if (dist2 < bestdist)
-            {
-                bestdist = dist2;
-                best = targetJoint;
+                float term = 0.f;
+                // Model the proportion of illuminated line (sine of the angle)
+                // T^i_j(\lambda)
+                term += glm::length(glm::cross(dir, pdir));
+                // TODO calculate R^i_j(lambda)
+
+                score += term * dlambda;
             }
+
+            jointScores[targetJoint] = score;
         }
-        std::cout << "Best dist: " << bestdist << '\n';
 
+        float bestscore = -HUGE_VAL;
+        int bestjoint = -1;
+        // For now just find highest score
+        for (size_t j = 0; j < jointScores.size(); j++)
+        {
+            if (jointScores[i] > bestscore)
+                bestjoint = i, bestscore = jointScores[i];
+        }
+        std::cout << "Best score: " << bestscore << " on joint " << bestjoint << '\n';
+
+        // TODO Sort scores, truncate to 4, and normalize
+
+        // TODO set weights
         // -1 means no joint (same with 0.f weight)
-        joints[4*i + 0]  = best;
+        joints[4*i + 0]  = bestjoint;
         joints[4*i + 1]  = -1;
         joints[4*i + 2]  = -1;
         joints[4*i + 3]  = -1;
-        weights[4*i + 0] = best == -1 ? 0.f : 1.f;
+        weights[4*i + 0] = bestjoint != -1 ? 1.f : 0.f;
         weights[4*i + 1] = 0.f;
         weights[4*i + 2] = 0.f;
         weights[4*i + 3] = 0.f;
