@@ -70,9 +70,9 @@ void TimelineDisplay::render() const
     glEnd();
 }
 
-void TimelineDisplay::mousePressEvent(QMouseEvent *event)
+void TimelineDisplay::mousePressEvent(QMouseEvent *event, int x, int y)
 {
-    glm::vec2 coord = getCoord(event->x(), event->y());
+    glm::vec2 coord = getCoord(x, y);
 
     std::cout << "timeline action @ " << coord << '\n';
     if (event->button() == Qt::LeftButton)

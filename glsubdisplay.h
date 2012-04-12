@@ -19,10 +19,10 @@ public:
     virtual bool contains(int x, int y) { return x > x_ && x < x_ + w_ && y > y_ && y < y_ + h_; }
     virtual void render() const = 0;
 
-    virtual void mousePressEvent(QMouseEvent *) { }
-    virtual void mouseReleaseEvent(QMouseEvent *) { }
-    virtual void mouseMoveEvent(QMouseEvent *) { }
-    virtual void wheelEvent(QWheelEvent *) { }
+    virtual void mousePressEvent(QMouseEvent *, int, int) { }
+    virtual void mouseReleaseEvent(QMouseEvent *, int, int) { }
+    virtual void mouseMoveEvent(QMouseEvent *, int, int) { }
+    virtual void wheelEvent(QWheelEvent *, int, int) { }
 
 protected:
     QObject *parent_;
@@ -53,7 +53,7 @@ public:
     TimelineDisplay(QObject *parent, timeline_data *data);
 
     virtual void render() const;
-    virtual void mousePressEvent(QMouseEvent *event);
+    virtual void mousePressEvent(QMouseEvent *event, int x, int y);
 
 private:
     timeline_data *data_;

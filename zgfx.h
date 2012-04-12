@@ -87,7 +87,7 @@ std::ostream& operator<< (std::ostream& os, const glm::vec4 &v);
 std::ostream& operator<< (std::ostream& os, const glm::quat &q);
 glm::quat axisAngleToQuat(const glm::vec4 &a);
 glm::vec4 quatToAxisAngle(const glm::quat &q);
-glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo = false);
+glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo = true);
 
 #endif
 

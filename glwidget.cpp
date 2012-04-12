@@ -385,7 +385,7 @@ void GLWidget::paintGL()
     }
 
     // render timeline
-    tdisplay_->render();
+    //tdisplay_->render();
 }
 
 void GLWidget::resizeGL(int width, int height)
@@ -439,17 +439,14 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
 {
     if (dragging || translating || zooming || rotating)
         return;
-    int x = event->x(), y = -event->y();
+    int x = event->x(), y = windowHeight-event->y();
     // Timeline events
     if (tdisplay_->contains(x, y))
-    {
-        std::cout << "timeline press event\n";
-        tdisplay_->mousePressEvent(event);
-    }
+        tdisplay_->mousePressEvent(event, x, y);
     // Handle main window events
     else 
     {
-        assert(y < windowHeight - timelineHeight);
+        assert(y > timelineHeight);
         glm::vec2 screenCoord = clickToScreenPos(x, y);
         // Left button possibly starts an edit
         if (event->button() == Qt::LeftButton && !dragging)
@@ -523,8 +520,8 @@ void GLWidget::mouseReleaseEvent(QMouseEvent *event)
 
 void GLWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    glm::vec2 screenCoord = clickToScreenPos(
-            event->x(), event->y());
+    int x = event->x(), y = windowHeight - event->y();
+    glm::vec2 screenCoord = clickToScreenPos(x, y);
     // This means it's outside the main view
     if (screenCoord == glm::vec2(HUGE_VAL, HUGE_VAL))
         // just ignore for now
@@ -798,7 +795,7 @@ void GLWidget::setPoseFromFrame(int frame)
 
 		SkeletonPose* pose = new SkeletonPose;
 		pose->poses.resize(last->poses.size());
-        for (int i = 0; i < pose->poses.size(); i++)
+        for (size_t i = 0; i < pose->poses.size(); i++)
         {
 			JointPose *jp = pose->poses[i] = new JointPose;
             glm::vec3 startPos = last->poses[i]->pos;
@@ -868,21 +865,20 @@ void GLWidget::renderJoint(const glm::mat4 &transform, const Joint* joint,
         glColor3f(1, 1, 1);
     renderCube();
 
+    const glm::vec3 worldPos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
+
     // Render axis (x,y,z lines) if necessary
     if (editMode == TRANSLATION_MODE && joint == selectedJoint)
     {
-        glm::vec3 axisCenter = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
-        renderAxes(transform, axisCenter);
+        renderAxes(transform, worldPos);
     }
     else if (editMode == ROTATION_MODE && joint == selectedJoint)
     {
-        glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
-        renderRotationSphere(transform, pos);
+        renderRotationSphere(transform, worldPos);
     }
     else if (editMode == SCALE_MODE && joint == selectedJoint)
     {
-        glm::vec3 pos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
-        renderScaleCircle(transform * joint->scale, pos);
+        renderScaleCircle(transform * joint->scale, worldPos);
     }
     // Record joint NDC coordinates
     glm::mat4 ptrans = getProjectionMatrix();
@@ -999,6 +995,7 @@ void GLWidget::renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &wo
 
 void GLWidget::renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoord)
 {
+    std::cout << "World coord: " << worldCoord << '\n';
     // Render in NDC coordinates, no projection matrix needed
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
@@ -1127,7 +1124,7 @@ glm::mat4 GLWidget::getViewMatrix() const
 
 glm::vec2 GLWidget::clickToScreenPos(int x, int y) const
 {
-    glm::vec2 screencoord((float)x / windowWidth, (float)y / (windowHeight - timelineHeight));
+    glm::vec2 screencoord((float)x / windowWidth, (float)(y - timelineHeight) / (windowHeight - timelineHeight));
     screencoord -= glm::vec2(0.5f);
     screencoord *= 2.f;
 
