@@ -36,7 +36,7 @@ void main()
 
     frag_pos = vertMat * position;
     frag_texcoord = texcoord;
-    frag_norm = norm;
+    frag_norm = normalMat * norm;
 
     gl_Position = projectionMatrix * viewMatrix * frag_pos;
 }

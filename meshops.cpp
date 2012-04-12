@@ -226,6 +226,9 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 
     printf("Finished assigning initial weights.\n");
 
+    // TODO first find "islands" of bad weights and remove them, to be filled
+    // in by the smoothing step
+
     // There are now some verts that aren't bound to any joints, verts that
     // were not visible to any joints.
     // For now, just find a neighbor and take their weighting

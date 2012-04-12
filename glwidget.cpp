@@ -43,7 +43,7 @@ static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2,
 
 GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
-    timelineHeight(200),
+    timelineHeight(0),
     selectedJoint(NULL),
     skeletonMode(NO_SKELETON_MODE),
     meshMode(NO_MESH_MODE),
@@ -377,11 +377,11 @@ void GLWidget::paintGL()
     }
     else if (meshMode == POSING_MODE)
     {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         if (shaderProgram)
             renderSkinnedMesh(viewMatrix, verts, nverts,
                     glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
     // render timeline
