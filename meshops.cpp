@@ -211,11 +211,11 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
             }
         }
 
-        // Fill in best 1, 0 0, 0 0, 0 0
+        // -1 means no joint (same with 0.f weight)
         joints[4*i + 0]  = best;
-        joints[4*i + 1]  = 0;
-        joints[4*i + 2]  = 0;
-        joints[4*i + 3]  = 0;
+        joints[4*i + 1]  = -1;
+        joints[4*i + 2]  = -1;
+        joints[4*i + 3]  = -1;
         weights[4*i + 0] = best == -1 ? 0.f : 1.f;
         weights[4*i + 1] = 0.f;
         weights[4*i + 2] = 0.f;
@@ -223,5 +223,44 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 
         printf("i: %zu / %zu\n", i + 1, rmesh->nverts);
     }
+
+    printf("Finished assigning initial weights.\n");
+
+    // There are now some verts that aren't bound to any joints, verts that
+    // were not visible to any joints.
+    // For now, just find a neighbor and take their weighting
+    // TODO this step should instead be a general smoothing
+    size_t unskinned_verts = 0;
+    for (size_t i = 0; i < rmesh->nverts; i++)
+    {
+        if (joints[4*i + 0] == -1)
+        {
+            unskinned_verts++;
+
+            // find a neighbor
+            for (size_t fi = 0; fi < rmesh->nfaces; fi++)
+            {
+                bool found = false;
+                int newjoint = -1;
+                const fullface &face = rmesh->ffaces[fi];
+                for (size_t vi = 0; vi < 3; vi++)
+                {
+                    if (face.fverts[vi].v == i)
+                        found = true;
+                    else if (joints[4*face.fverts[vi].v] != -1)
+                        newjoint = joints[4*face.fverts[vi].v];
+                }
+
+                if (found && newjoint != -1)
+                {
+                    printf("fixing %zu to (%d, 1.f)\n", unskinned_verts, newjoint);
+                    joints[4*i] = newjoint;
+                    weights[4*i] = 1.f;
+                    break;
+                }
+            }
+        }
+    }
+    printf("Fixed %zu unskinned verts.\n", unskinned_verts);
 }
 
