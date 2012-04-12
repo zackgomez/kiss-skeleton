@@ -342,6 +342,9 @@ void GLWidget::paintGL()
     glm::mat4 viewMatrix = arcball->getViewMatrix();
     glLoadMatrixf(glm::value_ptr(viewMatrix));
 
+    glEnable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
+
     // render grid
     renderEditGrid();
 
@@ -377,15 +380,15 @@ void GLWidget::paintGL()
     }
     else if (meshMode == POSING_MODE)
     {
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         if (shaderProgram)
             renderSkinnedMesh(viewMatrix, verts, nverts,
                     glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
-        //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
     // render timeline
-    //tdisplay_->render();
+    tdisplay_->render();
 }
 
 void GLWidget::resizeGL(int width, int height)

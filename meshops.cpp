@@ -179,12 +179,10 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 
     // First get all the joint world positions for easy access
     std::vector<glm::vec3> jointPos;
-    {
-        const std::vector<Joint*> joints = skeleton->getJoints();
-        jointPos = std::vector<glm::vec3>(joints.size());
-        for (size_t i = 0; i < joints.size(); i++)
-            jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
-    }
+    const std::vector<Joint*> skeljoints = skeleton->getJoints();
+    jointPos = std::vector<glm::vec3>(skeljoints.size());
+    for (size_t i = 0; i < skeljoints.size(); i++)
+        jointPos[i] = applyMatrix(skeljoints[i]->worldTransform, glm::vec3(0.f));
 
     // For each vertex, find the closest joint and bind only to that vertex
     // to distance
@@ -199,17 +197,39 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
         int best = -1;
         for (size_t j = 0; j < jointPos.size(); j++)
         {
-            // If point is not visible to joint, can't bind!
-            if (pointVisibleToPoint(jointPos[j], vert, rmesh) != -1)
+            // points defining the bone line
+            glm::vec3 p0, p1;
+            int targetJoint = -1;
+            // Figure out the end points of the bone
+            if (skeljoints[j]->parent == Skeleton::ROOT_PARENT)
                 continue;
-            const glm::vec3 diff = jointPos[j] - vert;
-            float dist = glm::dot(diff, diff);
-            if (dist < bestdist)
+            const Joint *parent = skeljoints[skeljoints[j]->parent];
+            targetJoint = parent->index;
+            p0 = jointPos[targetJoint];
+            p1 = jointPos[j];
+
+            float dist2 = HUGE_VAL;
+            const int nsegments = 10;
+            bool seen = false;
+            for (float lambda = 0; lambda <= 1.f; lambda += 1.f/nsegments)
             {
-                bestdist = dist;
-                best = j;
+                glm::vec3 cur = lambda * (p1 - p0) + p0;
+                if (pointVisibleToPoint(jointPos[j], vert, rmesh) != -1) continue;
+                seen = true;
+                glm::vec3 diff = cur - vert;
+                float cdist = glm::dot(diff, diff);
+                dist2 = cdist < dist2 ? cdist : dist2;
+            }
+            if (!seen)
+                continue;
+
+            if (dist2 < bestdist)
+            {
+                bestdist = dist2;
+                best = targetJoint;
             }
         }
+        std::cout << "Best dist: " << bestdist << '\n';
 
         // -1 means no joint (same with 0.f weight)
         joints[4*i + 0]  = best;
