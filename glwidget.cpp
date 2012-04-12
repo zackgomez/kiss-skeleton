@@ -368,10 +368,10 @@ void GLWidget::paintGL()
 
         if (selectedJoint)
         {
-            //renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
-                    //glm::vec4(0,1,0,1));
-            glColor3f(0,0,1);
-            glm::vec3 jointpos = applyMatrix(selectedJoint->worldTransform, glm::vec3(0, 0, 0));
+            renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
+                    glm::vec4(0,1,0,1));
+            //glColor3f(0,0,1);
+            //glm::vec3 jointpos = applyMatrix(selectedJoint->worldTransform, glm::vec3(0, 0, 0));
             //renderVisiblePoints(viewMatrix, rmesh, jointpos, -1);
         }
         glEnable(GL_DEPTH_TEST);

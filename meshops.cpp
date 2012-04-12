@@ -230,37 +230,41 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     // were not visible to any joints.
     // For now, just find a neighbor and take their weighting
     // TODO this step should instead be a general smoothing
-    size_t unskinned_verts = 0;
-    for (size_t i = 0; i < rmesh->nverts; i++)
+    size_t verts_fixed = 1;
+    while (verts_fixed > 0)
     {
-        if (joints[4*i + 0] == -1)
+        verts_fixed = 0;
+        for (size_t i = 0; i < rmesh->nfaces; i++)
         {
-            unskinned_verts++;
-
-            // find a neighbor
-            for (size_t fi = 0; fi < rmesh->nfaces; fi++)
+            fullface &face = rmesh->ffaces[i];
+            // find a valid joint in face
+            int joint = -1;
+            for (size_t j = 0; j < 3; j++)
             {
-                bool found = false;
-                int newjoint = -1;
-                const fullface &face = rmesh->ffaces[fi];
-                for (size_t vi = 0; vi < 3; vi++)
+                int curjoint;
+                if ((curjoint = joints[4*face.fverts[j].v]) != -1)
                 {
-                    if (face.fverts[vi].v == i)
-                        found = true;
-                    else if (joints[4*face.fverts[vi].v] != -1)
-                        newjoint = joints[4*face.fverts[vi].v];
-                }
-
-                if (found && newjoint != -1)
-                {
-                    printf("fixing %zu to (%d, 1.f)\n", unskinned_verts, newjoint);
-                    joints[4*i] = newjoint;
-                    weights[4*i] = 1.f;
+                    joint = curjoint;
                     break;
                 }
             }
+            // if all are unskinned, can't do anything
+            if (joint == -1) continue;
+            // Set unset vert joints to found value
+            for (size_t j = 0; j < 3; j++)
+            {
+                const size_t ind = 4*face.fverts[j].v;
+                if (joints[ind] == -1)
+                {
+                    joints[ind] = joint;
+                    weights[ind] = 1.f;
+                    ++verts_fixed;
+                }
+            }
+
+
         }
+        printf("Fixed %zu unskinned verts.\n", verts_fixed);
     }
-    printf("Fixed %zu unskinned verts.\n", unskinned_verts);
 }
 
