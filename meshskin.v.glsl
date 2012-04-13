@@ -22,7 +22,7 @@ void main()
     float total_weight = 0.f;
     for (int i = 0; i < 4; i++)
     {
-        if (weight[i] != 0.f)
+        if (weight[i] != 0.f && joint[i] >= 0 && joint[i] < 32)
         {
             vertMat += weight[i] * jointMatrices[joint[i]];
             total_weight += weight[i];
@@ -40,3 +40,4 @@ void main()
 
     gl_Position = projectionMatrix * viewMatrix * frag_pos;
 }
+

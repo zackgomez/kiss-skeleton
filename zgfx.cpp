@@ -38,6 +38,8 @@ rawmesh * readRawMesh(const char *contents, size_t len, bool &skinned)
 
     while (cs.getline(buf, sizeof buf))
     {
+        if (*buf == '\0') continue;
+
         char *cmd = strtok(buf, " ");
         char *arg = strtok(NULL, " ");
         if (strcmp(cmd, "v") == 0)
@@ -75,6 +77,7 @@ rawmesh * readRawMesh(const char *contents, size_t len, bool &skinned)
     // Read each line and act on it as necessary
     while (cs.getline(buf, sizeof buf))
     {
+        if (*buf == '\0') continue;
         char *cmd = strtok(buf, " ");
 
         if (strcmp(cmd, "v") == 0)

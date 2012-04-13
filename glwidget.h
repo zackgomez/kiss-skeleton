@@ -64,6 +64,8 @@ private:
     vert_p4t2n3j8 *verts;
     size_t nverts;
 
+    bool renderSelected;
+
     QString currentFile;
 
     int windowWidth, windowHeight, timelineHeight;

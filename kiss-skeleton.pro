@@ -1,5 +1,6 @@
 INCLUDEPATH  += glm-0.9.2.7
 CONFIG       += debug
+QMAKE_CXXFLAGS += -std=c++0x
 
 
 HEADERS       = glwidget.h \

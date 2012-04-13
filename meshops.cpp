@@ -2,31 +2,32 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
+#include <set>
+#include <unordered_map>
 #include "kiss-skeleton.h"
 #include "zgfx.h"
 
 struct graph_node
 {
-    graph_node **neighbors;
-    size_t num_neighbors;
+    std::set<graph_node *> neighbors;
 
+    size_t v; // index
     glm::vec4 pos;
+    std::vector<float> weights; // joint weights
 };
 
 struct graph
 {
-    size_t num_nodes;
-    graph_node **all_nodes;
+    std::unordered_map<int, graph_node *> nodes;
 };
 
 graph_node *
-make_graph_node(const glm::vec4 &pos)
+make_graph_node(size_t v, const glm::vec4 &pos)
 {
-    graph_node *ret = (graph_node *) malloc(sizeof(graph_node));
+    graph_node *ret = new graph_node;
 
-    ret->neighbors = 0;
-    ret->num_neighbors = 0;
     ret->pos = pos;
+    ret->v = v;
 
     return ret;
 }
@@ -34,13 +35,41 @@ make_graph_node(const glm::vec4 &pos)
 void
 add_neighbor(graph_node *node, graph_node *neighbor)
 {
-    node->num_neighbors++;
-    node->neighbors = (graph_node **) realloc(node->neighbors,
-            sizeof(graph_node *) * node->num_neighbors);
-    node->neighbors[node->num_neighbors - 1] = neighbor;
+    node->neighbors.insert(neighbor);
 }
 
-int pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
+graph *
+make_graph(const rawmesh *mesh)
+{
+    graph *g = new graph;
+
+    // Loop over all input faces
+    for (size_t fi = 0; fi < mesh->nfaces; fi++)
+    {
+        const fullface &face = mesh->ffaces[fi];
+        glm::vec4 verts[3];
+
+        // Create any verts necessary
+        for (size_t vi = 0; vi < 3; vi++)
+        {
+            size_t v = face.fverts[vi].v;
+            glm::vec4 vert = glm::make_vec4(mesh->verts[v].pos);
+            verts[vi] = vert;
+
+            if (g->nodes.count(v) == 0)
+                g->nodes[v] = make_graph_node(v, verts[vi]);
+
+            // add as a neighbor to previous nodes
+            for (size_t k = 0; k < vi; k++)
+                add_neighbor(g->nodes[face.fverts[k].v], g->nodes[v]);
+        }
+    }
+
+    return g;
+}
+
+int
+pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
         const rawmesh *mesh)
 {
     // A point is visible to another point if the line between them does not 
@@ -66,7 +95,8 @@ int pointVisibleToPoint(const glm::vec3 &refpt, const glm::vec3 &pt,
 }
 
 // Returns intersection point or vec3(HUGE_VAL) for no intersection
-glm::vec3 segIntersectsTriangle(const glm::vec3 &seg0, const glm::vec3 &seg1,
+glm::vec3
+segIntersectsTriangle(const glm::vec3 &seg0, const glm::vec3 &seg1,
         const glm::vec3 triangle[3])
 {
     const glm::vec3 NO_INTERSECTION = glm::vec3(HUGE_VAL);
@@ -177,26 +207,28 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     // Requires a mesh with skinning data
     assert(rmesh && rmesh->joints && rmesh->weights);
 
-    // First get all the joint world positions for easy access
+    // Make a graph representation of the mesh
+    printf("Creating graph structure.\n");
+    graph *g = make_graph(rmesh);
+    printf("nodes in graph: %zu\n", g->nodes.size());
+
+    // Get all the joint world positions for easy access
     std::vector<glm::vec3> jointPos;
     const std::vector<Joint*> skeljoints = skeleton->getJoints();
     jointPos = std::vector<glm::vec3>(skeljoints.size());
     for (size_t i = 0; i < skeljoints.size(); i++)
         jointPos[i] = applyMatrix(skeljoints[i]->worldTransform, glm::vec3(0.f));
 
-    std::vector<float> jointScores;
 
     // For each vertex, find the closest joint and bind only to that vertex
     // to distance
     vert  *verts   = rmesh->verts;
-    int   *joints  = rmesh->joints;
-    float *weights = rmesh->weights;
     for (size_t i = 0; i < rmesh->nverts; i++)
     {
         // cache vert position
         const glm::vec3 vert = glm::make_vec3(verts[i].pos);
         // Reset joint scores
-        jointScores.assign(jointPos.size(), -HUGE_VAL);
+        std::vector<float> jointScores(jointPos.size(), -HUGE_VAL);
 
         // fill in the weights
         for (size_t j = 0; j < jointPos.size(); j++)
@@ -242,81 +274,79 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 
             if (score > 0.f)
                 jointScores[targetJoint] = score;
+
         }
 
-        float bestscore = -HUGE_VAL;
-        int bestjoint = -1;
-        // For now just find highest score
-        for (size_t j = 0; j < jointScores.size(); j++)
-        {
-            if (jointScores[j] > bestscore)
-            {
-                bestjoint = j;
-                bestscore = jointScores[j];
-            }
-        }
-        std::cout << "[" << i+1 << "] score " << bestscore << " joint " << bestjoint << '\n';
+        // Assign to vertex for smoothing
+        g->nodes[i]->weights = jointScores;
 
-        // TODO Sort scores, truncate to 4, and normalize
-
-        // TODO set weights
-        // -1 means no joint (same with 0.f weight)
-        joints[4*i + 0]  = bestjoint;
-        joints[4*i + 1]  = -1;
-        joints[4*i + 2]  = -1;
-        joints[4*i + 3]  = -1;
-        weights[4*i + 0] = bestjoint != -1 ? 1.f : 0.f;
-        weights[4*i + 1] = 0.f;
-        weights[4*i + 2] = 0.f;
-        weights[4*i + 3] = 0.f;
-
+        // Done assigning initial values to this vert...
         printf("i: %zu / %zu\n", i + 1, rmesh->nverts);
     }
-
     printf("Finished assigning initial weights.\n");
 
-    // TODO first find "islands" of bad weights and remove them, to be filled
-    // in by the smoothing step
+    // TODO smooth weights
 
-    // There are now some verts that aren't bound to any joints, verts that
-    // were not visible to any joints.
-    // For now, just find a neighbor and take their weighting
-    // TODO this step should instead be a general smoothing
-    size_t verts_fixed = 1;
-    while (verts_fixed > 0)
+
+    // Finally, assign the weights to the mesh, only take top 4, and apply some
+    // thresholding
+    int   *joints  = rmesh->joints;
+    float *weights = rmesh->weights;
+    for (size_t vi = 0; vi < rmesh->nverts; vi++)
     {
-        verts_fixed = 0;
-        for (size_t i = 0; i < rmesh->nfaces; i++)
+        assert(g->nodes.count(vi));
+        std::vector<float> jointScores = g->nodes[vi]->weights;
+        for (size_t wi = 0; wi < 4; wi++)
         {
-            fullface &face = rmesh->ffaces[i];
-            // find a valid joint in face
-            int joint = -1;
-            for (size_t j = 0; j < 3; j++)
+            float bestscore = -HUGE_VAL;
+            int bestjoint = -1;
+            // For now just find highest score
+            for (size_t j = 0; j < jointScores.size(); j++)
             {
-                int curjoint;
-                if ((curjoint = joints[4*face.fverts[j].v]) != -1)
+                if (jointScores[j] > bestscore)
                 {
-                    joint = curjoint;
-                    break;
-                }
-            }
-            // if all are unskinned, can't do anything
-            if (joint == -1) continue;
-            // Set unset vert joints to found value
-            for (size_t j = 0; j < 3; j++)
-            {
-                const size_t ind = 4*face.fverts[j].v;
-                if (joints[ind] == -1)
-                {
-                    joints[ind] = joint;
-                    weights[ind] = 1.f;
-                    ++verts_fixed;
+                    bestjoint = j;
+                    bestscore = jointScores[j];
                 }
             }
 
+            // No more bones?
+            if (bestjoint == -1) // TODO possible threshold on weight here
+            {
+                // zero out the rest
+                for (; wi < 4; wi++)
+                {
+                    joints[4*vi + wi]  = -1;
+                    weights[4*vi + wi] = 0.f;
+                }
+                // no more work for this vert
+                break;
+            }
+            // Clear best score
+            jointScores[bestjoint] = -HUGE_VAL;
 
+            joints[4*vi + wi]  = bestjoint;
+            weights[4*vi + wi] = bestscore;
         }
-        printf("Fixed %zu unskinned verts.\n", verts_fixed);
+
+        // normalize scores
+        float sum = 0.f;
+        for (size_t wi = 0; wi < 4; wi++)
+            sum += weights[4*vi + wi];
+        for (size_t wi = 0; wi < 4; wi++)
+            weights[4*vi + wi] /= sum;
+        
+        // Some prints..
+        for (size_t wi = 0; wi < 4; wi++)
+        {
+            const int joint = joints[4*vi + wi];
+            const float weight = weights[4*vi + wi];
+            if (joint == -1)
+                printf("[ ] ");
+            else
+                printf("[%d %s %f] ", joint, skeljoints[joint]->name.c_str(), weight);
+        }
+        printf("\n");
     }
 }
 
