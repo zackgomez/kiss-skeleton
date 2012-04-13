@@ -202,6 +202,23 @@ void autoSkinMeshNearest(rawmesh *rmesh, const Skeleton *skeleton)
     }
 }
 
+void rogueRemoval(graph *g, const Skeleton *skeleton)
+{
+    printf("Beginning rogueRemoval\n");
+    const std::vector<Joint *> &joints = skeleton->getJoints();
+
+    // looping over all the joints, finding a valid point, and then expanding
+    // out from there marking all connected verts as valid.  Then find all 
+    // points not marked as valid, and remove their weights
+    for (size_t ji = 0; ji < joints.size(); ji++)
+    {
+        // Find a valid point
+
+    }
+
+    printf("rogueRemoval completed.\n");
+}
+
 void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 {
     // Requires a mesh with skinning data
@@ -286,6 +303,9 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     printf("Finished assigning initial weights.\n");
 
     // TODO smooth weights
+    // First remove "rogues" i.e. patches of weightings that don't make any
+    // sense given the graph structure
+    rogueRemoval(g, skeleton);
 
 
     // Finally, assign the weights to the mesh, only take top 4, and apply some
