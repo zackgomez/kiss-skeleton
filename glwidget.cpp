@@ -998,7 +998,6 @@ void GLWidget::renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &wo
 
 void GLWidget::renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoord)
 {
-    std::cout << "World coord: " << worldCoord << '\n';
     // Render in NDC coordinates, no projection matrix needed
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();

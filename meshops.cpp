@@ -201,17 +201,16 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
         // fill in the weights
         for (size_t j = 0; j < jointPos.size(); j++)
         {
-            // points defining the bone line
-            glm::vec3 p0, p1;
-            glm::vec3 pdir = glm::normalize(p1 - p0); // a^i (direction of bone)
             int targetJoint = -1;
             // Figure out the end points of the bone
             if (skeljoints[j]->parent == Skeleton::ROOT_PARENT)
                 continue;
             const Joint *parent = skeljoints[skeljoints[j]->parent];
             targetJoint = parent->index;
-            p0 = jointPos[targetJoint];
-            p1 = jointPos[j];
+            // points defining the bone line
+            glm::vec3 p0 = jointPos[targetJoint];
+            glm::vec3 p1 = jointPos[j];
+            glm::vec3 pdir = glm::normalize(p1 - p0); // a^i (direction of bone)
 
             // Calculate the integral
             float score = 0.f;
@@ -221,22 +220,28 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
                 // current point along bone (b^i_\lambda)
                 glm::vec3 cur = lambda * (p1 - p0) + p0;
                 // Direction from point to vert (d^i_\lambda)
-                glm::vec3 dir = vert - cur;
-                float mag2 = glm::dot(dir, dir);
-                dir /= mag2 * mag2;
+                glm::vec3 dij = vert - cur;
+                float mag2dir = glm::dot(dij, dij);
+                glm::vec3 dir = glm::normalize(dij);
                 // visibility test, term goes to zero if not visible
                 if (pointVisibleToPoint(jointPos[j], vert, rmesh) != -1) continue;
 
-                float term = 0.f;
+                float term = 1.f;
                 // Model the proportion of illuminated line (sine of the angle)
-                // T^i_j(\lambda)
-                term += glm::length(glm::cross(dir, pdir));
+                // T^i_j(\lambda) = || d^i_j x a^i ||
+                term *= glm::length(glm::cross(dir, pdir));
                 // TODO calculate R^i_j(lambda)
+                // R^i_j(\lambda) = max(d^i_\lambda . n_j, 0) / ||d_\lambda||^2
+                term *= 1.f / mag2dir; // just fall of with distance for now
 
                 score += term * dlambda;
             }
 
-            jointScores[targetJoint] = score;
+            // l^i term in front of integral, (bone length)
+            score *= glm::length(p1 - p0);
+
+            if (score > 0.f)
+                jointScores[targetJoint] = score;
         }
 
         float bestscore = -HUGE_VAL;
@@ -244,10 +249,13 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
         // For now just find highest score
         for (size_t j = 0; j < jointScores.size(); j++)
         {
-            if (jointScores[i] > bestscore)
-                bestjoint = i, bestscore = jointScores[i];
+            if (jointScores[j] > bestscore)
+            {
+                bestjoint = j;
+                bestscore = jointScores[j];
+            }
         }
-        std::cout << "Best score: " << bestscore << " on joint " << bestjoint << '\n';
+        std::cout << "[" << i+1 << "] score " << bestscore << " joint " << bestjoint << '\n';
 
         // TODO Sort scores, truncate to 4, and normalize
 
