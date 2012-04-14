@@ -36,9 +36,6 @@ static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
 static void renderIntersectionMesh(const glm::mat4 &transform, const rawmesh *rmesh,
         const glm::vec3 &a, const glm::vec3 &b);
 
-static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2,
-        const glm::vec2 &pt);
-
 GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
     renderSelected(true),
@@ -1243,20 +1240,5 @@ void renderLine(const glm::mat4 &transform, const glm::vec3 &p0, const glm::vec3
     glVertex3fv(glm::value_ptr(p0));
     glVertex3fv(glm::value_ptr(p1));
     glEnd();
-}
-
-float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
-{
-    // from http://local.wasp.uwa.edu.au/~pbourke/geometry/pointline/
-    float l = glm::length(p2 - p1);
-    float u = ((pt.x - p1.x) * (p2.x - p1.x) + (pt.y - p1.y) * (p2.y - p1.y)) / (l*l);
-
-    // if not 'on' then line segment, then inf distance
-    if (u < 0.f || u > 1.f)
-        return HUGE_VAL;
-
-    glm::vec2 intersect = p1 + u * (p2 - p1);
-    
-    return glm::length(pt - intersect);
 }
 

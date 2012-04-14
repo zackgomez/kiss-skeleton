@@ -505,3 +505,18 @@ glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo)
     return glm::vec3(pt);
 }
 
+float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt)
+{
+    // from http://local.wasp.uwa.edu.au/~pbourke/geometry/pointline/
+    float l = glm::length(p2 - p1);
+    float u = ((pt.x - p1.x) * (p2.x - p1.x) + (pt.y - p1.y) * (p2.y - p1.y)) / (l*l);
+
+    // if not 'on' then line segment, then inf distance
+    if (u < 0.f || u > 1.f)
+        return HUGE_VAL;
+
+    glm::vec2 intersect = p1 + u * (p2 - p1);
+    
+    return glm::length(pt - intersect);
+}
+

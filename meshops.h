@@ -4,7 +4,6 @@
 struct rawmesh;
 class Skeleton;
 
-void autoSkinMeshNearest(rawmesh *rmesh, const Skeleton *skeleton);
 void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton);
 
 // returns the index of the intersecting triangle, or -1
