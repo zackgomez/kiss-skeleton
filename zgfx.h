@@ -89,5 +89,7 @@ glm::quat axisAngleToQuat(const glm::vec4 &a);
 glm::vec4 quatToAxisAngle(const glm::quat &q);
 glm::vec3 applyMatrix(const glm::mat4 &mat, const glm::vec3 &vec, bool homo = true);
 
+float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2, const glm::vec2 &pt);
+
 #endif
 

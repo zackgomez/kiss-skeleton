@@ -3,6 +3,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <set>
+#include <queue>
 #include <unordered_map>
 #include "kiss-skeleton.h"
 #include "zgfx.h"
@@ -14,6 +15,10 @@ struct graph_node
     size_t v; // index
     glm::vec4 pos;
     std::vector<float> weights; // joint weights
+    std::vector<float> newweights; // use for smoothing
+
+    // used for some computations
+    int flag;
 };
 
 struct graph
@@ -32,10 +37,13 @@ make_graph_node(size_t v, const glm::vec4 &pos)
     return ret;
 }
 
+/* Creates an undirected edge (i.e. both ways) between the two passed nodes
+ */
 void
 add_neighbor(graph_node *node, graph_node *neighbor)
 {
     node->neighbors.insert(neighbor);
+    neighbor->neighbors.insert(node);
 }
 
 graph *
@@ -47,25 +55,30 @@ make_graph(const rawmesh *mesh)
     for (size_t fi = 0; fi < mesh->nfaces; fi++)
     {
         const fullface &face = mesh->ffaces[fi];
-        glm::vec4 verts[3];
 
         // Create any verts necessary
         for (size_t vi = 0; vi < 3; vi++)
         {
-            size_t v = face.fverts[vi].v;
-            glm::vec4 vert = glm::make_vec4(mesh->verts[v].pos);
-            verts[vi] = vert;
+            const size_t v = face.fverts[vi].v;
 
             if (g->nodes.count(v) == 0)
-                g->nodes[v] = make_graph_node(v, verts[vi]);
+                g->nodes[v] = make_graph_node(v, glm::make_vec4(mesh->verts[v].pos));
 
-            // add as a neighbor to previous nodes
+            // connect up nodes
             for (size_t k = 0; k < vi; k++)
                 add_neighbor(g->nodes[face.fverts[k].v], g->nodes[v]);
         }
     }
 
     return g;
+}
+
+void
+free_graph(graph *g)
+{
+    for (auto git = g->nodes.begin(); git != g->nodes.end(); git++)
+        delete git->second;
+    delete g;
 }
 
 int
@@ -154,72 +167,177 @@ segIntersectsTriangle(const glm::vec3 &seg0, const glm::vec3 &seg1,
     return I;
 }
 
-
-void autoSkinMeshNearest(rawmesh *rmesh, const Skeleton *skeleton)
+int
+findValidPoint(const graph *g, const Skeleton *skeleton, size_t joint)
 {
-    // Requires a mesh with skinning data
-    assert(rmesh && rmesh->joints && rmesh->weights);
-
-    // First get all the joint world positions for easy access
-    std::vector<glm::vec3> jointPos;
+    int v = -1;
+    float best = -HUGE_VAL;
+    // Just do the simple thing and find the vert with the highest score...
+    for (auto it = g->nodes.begin(); it != g->nodes.end(); it++)
     {
-        const std::vector<Joint*> joints = skeleton->getJoints();
-        jointPos = std::vector<glm::vec3>(joints.size());
-        for (size_t i = 0; i < joints.size(); i++)
-            jointPos[i] = applyMatrix(joints[i]->worldTransform, glm::vec3(0.f));
-    }
-
-    // For each vertex, find the closest joint and bind only to that vertex
-    // to distance
-    vert  *verts   = rmesh->verts;
-    int   *joints  = rmesh->joints;
-    float *weights = rmesh->weights;
-    for (size_t i = 0; i < rmesh->nverts; i++)
-    {
-        printf("i: %zu\n", i);
-        float bestdist = HUGE_VAL;
-        size_t best = 0;
-        for (size_t j = 0; j < jointPos.size(); j++)
+        // TODO
+        // Instead of weight use distance to bone line (pointLineDist)
+        // be careful of multiple bones emanating from a single joint
+        if (it->second->weights[joint] > best)
         {
-            const glm::vec3 diff = jointPos[j] - glm::make_vec3(verts[i].pos);
-            float dist = glm::dot(diff, diff);
-            if (dist < bestdist)
-            {
-                bestdist = dist;
-                best = j;
-            }
+            best = it->second->weights[joint];
+            v = it->first;
         }
-
-        // Fill in best 1, 0 0, 0 0, 0 0
-        joints[4*i + 0]  = best;
-        joints[4*i + 1]  = 0;
-        joints[4*i + 2]  = 0;
-        joints[4*i + 3]  = 0;
-        weights[4*i + 0] = 1.f;
-        weights[4*i + 1] = 0.f;
-        weights[4*i + 2] = 0.f;
-        weights[4*i + 3] = 0.f;
     }
+
+    return v;
 }
 
-void rogueRemoval(graph *g, const Skeleton *skeleton)
+void
+clearFlag(graph *g)
+{
+    for (auto it = g->nodes.begin(); it != g->nodes.end(); it++)
+        it->second->flag = 0;
+}
+
+void
+rogueRemoval(graph *g, const Skeleton *skeleton)
 {
     printf("Beginning rogueRemoval\n");
-    const std::vector<Joint *> &joints = skeleton->getJoints();
 
-    // looping over all the joints, finding a valid point, and then expanding
-    // out from there marking all connected verts as valid.  Then find all 
-    // points not marked as valid, and remove their weights
-    for (size_t ji = 0; ji < joints.size(); ji++)
+    // Go over each bone
+    for (size_t ji = 0; ji < skeleton->getJoints().size(); ji++)
     {
-        // Find a valid point
+        size_t nodes_flagged = 0;
+        // Find a "model point"
+        int startV = findValidPoint(g, skeleton, ji);
+        if (startV == -1)
+            continue;
 
+        // Traverse the graph pushing the valid out to nodes connected to the
+        // model point that have weighting for this bone
+        clearFlag(g);
+        std::queue<graph_node *> q;
+        q.push(g->nodes[startV]);
+        while (!q.empty())
+        {
+            graph_node *n = q.front();
+            q.pop();
+
+            // early out
+            if (n->flag) continue;
+
+            n->flag = 1;
+            ++nodes_flagged;
+            // add neighbors
+            for (auto nit = n->neighbors.begin(); nit != n->neighbors.end(); nit++)
+            {
+                graph_node *nn = *nit;
+                if (!nn->flag && n->weights[ji] != -HUGE_VAL)
+                    q.push(nn);
+            }
+        }
+        printf("(%zu) %zu marked nodes in rogue removal.\n", ji, nodes_flagged);
+
+        // Now go through all nodes, if they are weighted to the current joint,
+        // make sure they're valid.
+        size_t nodes_affected = 0;
+        for (auto git = g->nodes.begin(); git != g->nodes.end(); git++)
+        {
+            graph_node *n = git->second;
+
+            // if joint is weighted but not valid, remove weighting
+            if (n->weights[ji] != -HUGE_VAL && !n->flag)
+            {
+                ++nodes_affected;
+                n->weights[ji] = -HUGE_VAL;
+            }
+        }
+        printf("(%zu) %zu nodes affected in rogue removal.\n", ji, nodes_affected);
     }
 
     printf("rogueRemoval completed.\n");
 }
 
-void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
+void
+gapFill(graph *g)
+{
+    size_t nodes_attached = 1;
+    while (nodes_attached > 0)
+    {
+        nodes_attached = 0;
+        // find completely unassigned verts
+        for (auto git = g->nodes.begin(); git != g->nodes.end(); git++)
+        {
+            graph_node *n = git->second;
+            // see if the vert is completely unassigned
+            size_t i;
+            for (i = 0; i < n->weights.size(); i++)
+                if (n->weights[i] != -HUGE_VAL)
+                    break;
+            if (i != n->weights.size())
+                continue;
+
+            ++nodes_attached;
+
+            // average surrounding verts
+            for (auto nit = n->neighbors.begin(); nit != n->neighbors.end(); nit++)
+            {
+                const graph_node *nn = *nit;
+                for (i = 0; i < n->weights.size(); i++)
+                {
+                    if (nn->weights[i] != -HUGE_VAL)
+                    {
+                        if (n->weights[i] == -HUGE_VAL)
+                            n->weights[i] = nn->weights[i];
+                        else
+                            n->weights[i] += nn->weights[i];
+                    }
+                }
+            }
+            for (i = 0; i < n->weights.size(); i++)
+                n->weights[i] /= n->weights.size();
+        }
+        printf("Connected %zu unconnected verts.\n", nodes_attached);
+    }
+}
+
+void
+smoothWeights(graph *g)
+{
+    // just get the size of the weights
+    size_t nweights = g->nodes[0]->weights.size();
+
+    // for every node, set newweights to the simple average of all the
+    // surrounding vertex weights
+    for (auto git = g->nodes.begin(); git != g->nodes.end(); git++)
+    {
+        graph_node *cur = git->second;
+
+        // start with current weights
+        cur->newweights = cur->weights;
+
+        // loop over neighbors
+        int count = 1; // be sure to include ourself
+        for (auto nit = cur->neighbors.begin(); nit != cur->neighbors.end(); nit++)
+        {
+            graph_node *nn = *nit;
+            assert(nn->weights.size() == nweights);
+            ++count;
+
+            // now sum
+            for (size_t i = 0; i < nweights; i++)
+            {
+                if (cur->newweights[i] == -HUGE_VAL && nn->weights[i] != -HUGE_VAL)
+                    cur->newweights[i] = nn->weights[i];
+                else if (nn->weights[i] != -HUGE_VAL)
+                    cur->newweights[i] += nn->weights[i];
+            }
+        }
+
+        // Average and assign
+        for (size_t i = 0; i < nweights; i++)
+            cur->weights[i] = cur->newweights[i] / count;
+    }
+}
+
+void
+autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 {
     // Requires a mesh with skinning data
     assert(rmesh && rmesh->joints && rmesh->weights);
@@ -228,6 +346,16 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     printf("Creating graph structure.\n");
     graph *g = make_graph(rmesh);
     printf("nodes in graph: %zu\n", g->nodes.size());
+    for (auto git = g->nodes.begin(); git != g->nodes.end(); git++)
+    {
+        graph_node *n = git->second;
+        printf("vertex %zu (%zu): ", n->v, n->neighbors.size());
+        for (auto nit = n->neighbors.begin(); nit != n->neighbors.end(); nit++)
+        {
+            printf("%zu ", (*nit)->v);
+        }
+        printf("\n");
+    }
 
     // Get all the joint world positions for easy access
     std::vector<glm::vec3> jointPos;
@@ -281,7 +409,7 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
                 term *= glm::length(glm::cross(dir, pdir));
                 // TODO calculate R^i_j(lambda)
                 // R^i_j(\lambda) = max(d^i_\lambda . n_j, 0) / ||d_\lambda||^2
-                term *= 1.f / mag2dir; // just fall of with distance for now
+                term *= 1.f / mag2dir; // just fall off with distance for now
 
                 score += term * dlambda;
             }
@@ -289,9 +417,9 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
             // l^i term in front of integral, (bone length)
             score *= glm::length(p1 - p0);
 
+            // assign if non zero score
             if (score > 0.f)
                 jointScores[targetJoint] = score;
-
         }
 
         // Assign to vertex for smoothing
@@ -306,6 +434,10 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     // First remove "rogues" i.e. patches of weightings that don't make any
     // sense given the graph structure
     rogueRemoval(g, skeleton);
+
+    // Fixes completely unassigned verts
+    //gapFill(g);
+    //smoothWeights(g);
 
 
     // Finally, assign the weights to the mesh, only take top 4, and apply some
@@ -368,5 +500,8 @@ void autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
         }
         printf("\n");
     }
+
+    // clean up
+    free_graph(g);
 }
 
