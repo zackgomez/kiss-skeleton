@@ -17,6 +17,7 @@ class Arcball;
 class Skeleton;
 struct SkeletonPose;
 class Joint;
+struct graph;
 
 class GLWidget : public QGLWidget
 {
@@ -68,6 +69,7 @@ private:
     rawmesh *rmesh;
     vert_p4t2n3j8 *verts;
     size_t nverts;
+    graph *vertgraph;
 
     bool renderSelected;
 

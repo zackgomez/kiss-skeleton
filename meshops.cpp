@@ -2,29 +2,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
-#include <set>
 #include <queue>
-#include <unordered_map>
 #include "kiss-skeleton.h"
 #include "zgfx.h"
-
-struct graph_node
-{
-    std::set<graph_node *> neighbors;
-
-    size_t v; // index
-    glm::vec4 pos;
-    std::vector<float> weights; // joint weights
-    std::vector<float> newweights; // use for smoothing
-
-    // used for some computations
-    int flag;
-};
-
-struct graph
-{
-    std::unordered_map<int, graph_node *> nodes;
-};
 
 graph_node *
 make_graph_node(size_t v, const glm::vec4 &pos)
@@ -33,6 +13,8 @@ make_graph_node(size_t v, const glm::vec4 &pos)
 
     ret->pos = pos;
     ret->v = v;
+    ret->norm = glm::vec3(0.f);
+    ret->flag = 0;
 
     return ret;
 }
@@ -67,15 +49,25 @@ make_graph(const rawmesh *mesh)
             // connect up nodes
             for (size_t k = 0; k < vi; k++)
                 add_neighbor(g->nodes[face.fverts[k].v], g->nodes[v]);
+
+            // accumulate normal
+            g->nodes[v]->norm += mesh->norms[face.fverts[vi].vn];
         }
     }
 
+    // normalize all the norms
+    for (auto git = g->nodes.begin(); git != g->nodes.end(); git++)
+        git->second->norm = glm::normalize(git->second->norm);
+
+    // Done
     return g;
 }
 
 void
 free_graph(graph *g)
 {
+    if (!g) return;
+
     for (auto git = g->nodes.begin(); git != g->nodes.end(); git++)
         delete git->second;
     delete g;
@@ -336,7 +328,7 @@ smoothWeights(graph *g)
     }
 }
 
-void
+graph *
 autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 {
     // Requires a mesh with skinning data
@@ -346,16 +338,6 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     printf("Creating graph structure.\n");
     graph *g = make_graph(rmesh);
     printf("nodes in graph: %zu\n", g->nodes.size());
-    for (auto git = g->nodes.begin(); git != g->nodes.end(); git++)
-    {
-        graph_node *n = git->second;
-        printf("vertex %zu (%zu): ", n->v, n->neighbors.size());
-        for (auto nit = n->neighbors.begin(); nit != n->neighbors.end(); nit++)
-        {
-            printf("%zu ", (*nit)->v);
-        }
-        printf("\n");
-    }
 
     // Get all the joint world positions for easy access
     std::vector<glm::vec3> jointPos;
@@ -371,7 +353,9 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
     for (size_t i = 0; i < rmesh->nverts; i++)
     {
         // cache vert position
-        const glm::vec3 vert = glm::make_vec3(verts[i].pos);
+        graph_node *node = g->nodes[i];
+        const glm::vec3 vert = glm::vec3(node->pos);
+        const glm::vec3 norm = node->norm;
         // Reset joint scores
         std::vector<float> jointScores(jointPos.size(), -HUGE_VAL);
 
@@ -391,7 +375,7 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 
             // Calculate the integral
             float score = 0.f;
-            const float dlambda = 0.1f;
+            const float dlambda = 0.5f;
             for (float lambda = 0; lambda <= 1.f; lambda += dlambda)
             {
                 // current point along bone (b^i_\lambda)
@@ -401,16 +385,18 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
                 float mag2dir = glm::dot(dij, dij);
                 glm::vec3 dir = glm::normalize(dij);
                 // visibility test, term goes to zero if not visible
-                if (pointVisibleToPoint(jointPos[j], vert, rmesh) != -1) continue;
+                if (pointVisibleToPoint(cur, vert, rmesh) != -1) continue;
 
                 float term = 1.f;
                 // Model the proportion of illuminated line (sine of the angle)
                 // T^i_j(\lambda) = || d^i_j x a^i ||
                 term *= glm::length(glm::cross(dir, pdir));
-                // TODO calculate R^i_j(lambda)
+                // Proportion of recieved light (lambertian), includes angle of
+                // incidence and an r^2 falloff
                 // R^i_j(\lambda) = max(d^i_\lambda . n_j, 0) / ||d_\lambda||^2
-                term *= 1.f / mag2dir; // just fall off with distance for now
+                term *= glm::max(glm::dot(dir, norm), 0.f) / mag2dir;
 
+                // accumulate integral
                 score += term * dlambda;
             }
 
@@ -452,7 +438,7 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
         {
             float bestscore = -HUGE_VAL;
             int bestjoint = -1;
-            // For now just find highest score
+            // Find the highest score
             for (size_t j = 0; j < jointScores.size(); j++)
             {
                 if (jointScores[j] > bestscore)
@@ -489,6 +475,7 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
             weights[4*vi + wi] /= sum;
         
         // Some prints..
+        printf("(vert %zu) ", vi);
         for (size_t wi = 0; wi < 4; wi++)
         {
             const int joint = joints[4*vi + wi];
@@ -501,7 +488,6 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
         printf("\n");
     }
 
-    // clean up
-    free_graph(g);
+    return g;
 }
 

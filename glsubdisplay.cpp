@@ -51,7 +51,7 @@ void TimelineDisplay::render() const
         glVertex2f(1, 0.5f);
     glEnd();
     
-    if (data_->currentAnimation != NULL)
+    if (data_->currentAnimation)
     {
         glBegin(GL_LINES);
         for(int i = 1; i <= data_->currentAnimation->endFrame; i++)
@@ -75,6 +75,7 @@ void TimelineDisplay::render() const
 
 void TimelineDisplay::mousePressEvent(QMouseEvent *event, int x, int y)
 {
+    if (!data_->currentAnimation) return;
     glm::vec2 coord = getCoord(x, y);
 
     std::cout << "timeline action @ " << coord << '\n';

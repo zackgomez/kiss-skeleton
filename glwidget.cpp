@@ -31,10 +31,10 @@ static void renderLine(const glm::mat4 &transform,
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
 static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh,
         int joint, const glm::vec4 &color);
+static void renderWeightedPoints(const glm::mat4 &transform, const rawmesh *mesh,
+        const graph *g, size_t ji, const glm::vec4 &color);
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts);
-static void renderIntersectionMesh(const glm::mat4 &transform, const rawmesh *rmesh,
-        const glm::vec3 &a, const glm::vec3 &b);
 
 GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
@@ -48,6 +48,7 @@ GLWidget::GLWidget(QWidget *parent) :
     dragging(false),
     rotating(false), translating(false), zooming(false)
 {
+    vertgraph = NULL;
     skeleton = NULL;
     bindPose = NULL;
     copiedPose = NULL;
@@ -188,7 +189,7 @@ void GLWidget::autoSkinMesh()
         return;
 
     // TODO display a QProgressDialog here
-    autoSkinMeshBest(rmesh, skeleton);
+    graph *newgraph = autoSkinMeshBest(rmesh, skeleton);
     // regenerate verts
     free(verts);
     verts = createSkinnedVertArray(rmesh, &nverts);
@@ -196,6 +197,8 @@ void GLWidget::autoSkinMesh()
     skeleton->setBindPose();
     freeSkeletonPose(bindPose);
     bindPose = skeleton->currentPose();
+    free_graph(vertgraph);
+    vertgraph = newgraph;
 
     std::cout << "auto skinning complete\n";
 }
@@ -404,6 +407,11 @@ void GLWidget::paintGL()
     {
         renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
                 glm::vec4(0,1,0,1));
+    }
+    if (selectedJoint && rmesh && vertgraph)
+    {
+        renderWeightedPoints(viewMatrix, rmesh, 
+                vertgraph, selectedJoint->index, glm::vec4(0.8f, 0.8f, 0.2f, 1));
     }
 
     // render timeline
@@ -1239,6 +1247,27 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
                     glColor4f(0.8f, 0.1f, 0.1f, 1.f);
                 glVertex4fv(verts[i].pos);
             }
+    glEnd();
+    glPointSize(1);
+    glEnable(GL_DEPTH_TEST);
+}
+
+void renderWeightedPoints(const glm::mat4 &transform, const rawmesh *mesh,
+        const graph *g, size_t ji, const glm::vec4 &color)
+{
+    glLoadMatrixf(glm::value_ptr(transform));
+    glDisable(GL_DEPTH_TEST);
+    const size_t nverts = mesh->nverts;
+    const vert* verts = mesh->verts;
+
+    glPointSize(5);
+    glBegin(GL_POINTS);
+    glColor4fv(glm::value_ptr(color));
+    for (size_t i = 0; i < nverts; i++)
+    {
+        if (g->nodes.find(i)->second->weights[ji] != -HUGE_VAL)
+            glVertex4fv(verts[i].pos);
+    }
     glEnd();
     glPointSize(1);
     glEnable(GL_DEPTH_TEST);
