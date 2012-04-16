@@ -42,7 +42,7 @@ static float pointLineDist(const glm::vec2 &p1, const glm::vec2 &p2,
 GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
     renderSelected(true),
-    timelineHeight(0),
+    timelineHeight(200),
     selectedJoint(NULL),
     skeletonMode(NO_SKELETON_MODE),
     meshMode(NO_MESH_MODE),
@@ -60,8 +60,6 @@ GLWidget::GLWidget(QWidget *parent) :
 
     // timeline vars
     tdata_ = new timeline_data();
-    tdata_->startFrame = 1;
-    tdata_->endFrame = 60;
     tdata_->currentFrame = 1;
     tdisplay_ = new TimelineDisplay(this, tdata_);
 }
@@ -276,16 +274,43 @@ void GLWidget::closeFile()
     // TODO clear timeline/keyframes
 }
 
+void GLWidget::newAnimation()
+{
+    NewAnimDialog *animDialog = new NewAnimDialog(this);
+    if (animDialog->result() != QDialog::Accepted) return;
+    animation* anim = new animation;
+    anim->endFrame = animDialog->getAnimLen();
+    std::string animName = animDialog->getAnimName().toStdString();
+    // Not ok if anim length not positive
+    bool ok = anim->endFrame > 0;
+    QString errormsg = tr("Invalid length; cannot be negative!");
+    // Not ok if another animation has the same name
+    for (auto it = tdata_->animations.begin(); it < tdata_->animations.end(); it++)
+        if (animName == (*it)->name)
+        {
+            ok = false;
+            errormsg = tr("Animation name already used!");
+        }
+    if (!ok)
+    {
+        QMessageBox::information(this, tr("Error!"), errormsg);
+        return;
+    }
+    anim->name = animName; 
+    tdata_->animations.push_back(anim);
+    tdata_->currentAnimation = anim;
+    std::cout << "New animation made: " << anim->name << ", length: " << anim->endFrame << std::endl;
+}
 void GLWidget::setKeyframe()
 {
     if (skeleton == NULL) return;
-    tdata_->keyframes[tdata_->currentFrame] = skeleton->currentPose();
+    tdata_->currentAnimation->keyframes[tdata_->currentFrame] = skeleton->currentPose();
     updateGL();
 }
 
 void GLWidget::deleteKeyframe()
 {
-    tdata_->keyframes.erase(tdata_->currentFrame);
+    tdata_->currentAnimation->keyframes.erase(tdata_->currentFrame);
     updateGL();
 }
 
@@ -766,21 +791,21 @@ void GLWidget::setJointScale(const Joint* joint, const glm::vec2 &dragPos)
 
 void GLWidget::setPoseFromFrame(int frame)
 {
-    if (tdata_->keyframes.count(frame) > 0)
+    if (tdata_->currentAnimation->keyframes.count(frame) > 0)
     {
-        skeleton->setPose(tdata_->keyframes[frame]);
+        skeleton->setPose(tdata_->currentAnimation->keyframes[frame]);
     } 
-    else if (tdata_->keyframes.size() > 1)
+    else if (tdata_->currentAnimation->keyframes.size() > 1)
     {
         int lastKeyframe = tdata_->currentFrame;
         int nextKeyframe = tdata_->currentFrame;
-        while (tdata_->keyframes.count(lastKeyframe) == 0 && lastKeyframe > tdata_->startFrame)
+        while (tdata_->currentAnimation->keyframes.count(lastKeyframe) == 0 && lastKeyframe > 1) 
             lastKeyframe--;
-        while (tdata_->keyframes.count(nextKeyframe) == 0 && nextKeyframe < tdata_->endFrame)
+        while (tdata_->currentAnimation->keyframes.count(nextKeyframe) == 0 && nextKeyframe < tdata_->currentAnimation->endFrame)
             nextKeyframe++;
-        if (tdata_->keyframes.count(lastKeyframe) == 0)
+        if (tdata_->currentAnimation->keyframes.count(lastKeyframe) == 0)
             lastKeyframe = nextKeyframe;
-        if (tdata_->keyframes.count(nextKeyframe) == 0)
+        if (tdata_->currentAnimation->keyframes.count(nextKeyframe) == 0)
             nextKeyframe = lastKeyframe;
         
         // The normalized position of the current frame between the keyframes
@@ -788,9 +813,9 @@ void GLWidget::setPoseFromFrame(int frame)
         if (nextKeyframe - lastKeyframe > 0)
             anim = float(tdata_->currentFrame - lastKeyframe) / (nextKeyframe - lastKeyframe);
 
-		assert(tdata_->keyframes.count(lastKeyframe) && tdata_->keyframes.count(nextKeyframe));
-		const SkeletonPose *last = tdata_->keyframes[lastKeyframe];
-		const SkeletonPose *next = tdata_->keyframes[nextKeyframe];
+		assert(tdata_->currentAnimation->keyframes.count(lastKeyframe) && tdata_->currentAnimation->keyframes.count(nextKeyframe));
+		const SkeletonPose *last = tdata_->currentAnimation->keyframes[lastKeyframe];
+		const SkeletonPose *next = tdata_->currentAnimation->keyframes[nextKeyframe];
 		assert(last->poses.size() == next->poses.size());
 
 		SkeletonPose* pose = new SkeletonPose;
@@ -826,10 +851,7 @@ void GLWidget::setFrame(int frame)
 void GLWidget::update()
 {
     // TODO Couldn't this be done with a mod?
-    if (tdata_->currentFrame == tdata_->endFrame)
-        setFrame(tdata_->startFrame);
-    else
-        setFrame(tdata_->currentFrame + 1);
+    setFrame(tdata_->currentFrame % tdata_->currentAnimation->endFrame + 1);
 }
 
 void GLWidget::renderEditGrid() const

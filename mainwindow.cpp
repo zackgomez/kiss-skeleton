@@ -73,13 +73,18 @@ void MainWindow::createActions()
     connect(autoSkinAct, SIGNAL(triggered()), glwidget, SLOT(autoSkinMesh()));
     
     
+    newAnimation = new QAction(tr("&New Animation"), this);
+    newAnimation->setShortcut(QKeySequence(tr("Ctrl+Shift+k")));
+    newAnimation->setStatusTip(tr("Creates a new animation."));
+    connect(newAnimation, SIGNAL(triggered()), glwidget, SLOT(newAnimation()));
+
     setKeyframe = new QAction(tr("Set &Keyframe"), this);
-    setKeyframe->setShortcut(QKeySequence(tr("Ctrl+k")));
+    setKeyframe->setShortcut(QKeySequence(tr("k")));
     setKeyframe->setStatusTip(tr("Creates a keyframe at the current frame with the current pose"));
     connect(setKeyframe, SIGNAL(triggered()), glwidget, SLOT(setKeyframe()));
     
     delKeyframe = new QAction(tr("De&lete Keyframe"), this);
-    delKeyframe->setShortcut(QKeySequence(tr("Ctrl+l")));
+    delKeyframe->setShortcut(QKeySequence(tr("Ctrl+k")));
     delKeyframe->setStatusTip(tr("Deletes the keyframe at the current frame"));
     connect(delKeyframe, SIGNAL(triggered()), glwidget, SLOT(deleteKeyframe()));
     
@@ -117,6 +122,7 @@ void MainWindow::createMenus()
     skinningMenu->addAction(autoSkinAct);
 
     animationMenu = menuBar()->addMenu(tr("&Animation"));
+    animationMenu->addAction(newAnimation);
     animationMenu->addAction(setKeyframe);
     animationMenu->addAction(delKeyframe);
     animationMenu->addAction(copyPose);

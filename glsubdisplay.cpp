@@ -51,21 +51,24 @@ void TimelineDisplay::render() const
         glVertex2f(1, 0.5f);
     glEnd();
     
-    glBegin(GL_LINES);
-    for(int i = data_->startFrame; i <= data_->endFrame; i++)
+    if (data_->currentAnimation != NULL)
     {
-        // TODO some kind of blending here to show currently (occupied) frame
-        // Highlight current frame red
-        if (i == data_->currentFrame)
-            glColor3f(1.0f, 0.f, 0.f);
-        else
-            glColor3f(1.0f, 1.0f, 1.0f);
-        if (data_->keyframes.count(i) > 0)
-            glColor3f(1.0f, 1.0f, 0.0f);
+        glBegin(GL_LINES);
+        for(int i = 1; i <= data_->currentAnimation->endFrame; i++)
+        {
+            // TODO some kind of blending here to show currently (occupied) frame
+            // Highlight current frame red
+            if (i == data_->currentFrame)
+                glColor3f(1.0f, 0.f, 0.f);
+            else
+                glColor3f(1.0f, 1.0f, 1.0f);
+            if (data_->currentAnimation->keyframes.count(i) > 0)
+                glColor3f(1.0f, 1.0f, 0.0f);
 
-        float x = -1.0f + 2.f * i / (data_->endFrame - data_->startFrame + 2);
-        glVertex2f(x, 0.5f);
-        glVertex2f(x, -0.5f);
+            float x = -1.0f + 2.f * i / (data_->currentAnimation->endFrame + 1);
+            glVertex2f(x, 0.5f);
+            glVertex2f(x, -0.5f);
+        }
     }
     glEnd();
 }
@@ -79,9 +82,10 @@ void TimelineDisplay::mousePressEvent(QMouseEvent *event, int x, int y)
     {
         if (coord.y > 0.25f && coord.y < 0.75f)
         {
-            int range = data_->endFrame - data_->startFrame;
-            int frameOffset = std::min(coord.x, 1.f) * range + 1;
-            data_->currentFrame = data_->startFrame + frameOffset;
+            int range = data_->currentAnimation->endFrame + 1;
+            int frameOffset = std::min(coord.x, 1.f) * range + 0.5;
+            frameOffset = std::min(std::max(frameOffset, 1), data_->currentAnimation->endFrame);
+            data_->currentFrame = frameOffset;
             std::cout << "Selected frame " << data_->currentFrame << std::endl;
         }
     }

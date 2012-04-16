@@ -1,5 +1,7 @@
 #pragma once
 #include <map>
+#include <vector>
+#include <string>
 #include <glm/glm.hpp>
 
 class QObject;
@@ -42,10 +44,18 @@ private:
 };
 */
 
+struct animation
+{
+    std::string name;
+    std::map<int, SkeletonPose*> keyframes;
+    int endFrame;
+};
+
 struct timeline_data
 {
-    int startFrame, endFrame, currentFrame;
-    std::map<int, SkeletonPose*> keyframes;
+    int currentFrame;
+    std::vector<animation*> animations;
+    animation* currentAnimation;
 };
 class TimelineDisplay : public GLSubDisplay
 {

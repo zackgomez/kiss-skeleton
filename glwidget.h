@@ -2,6 +2,10 @@
 #include <GL/glew.h>
 #include <QGLWidget>
 #include <QTimer>
+#include <QDialog>
+#include <QLineEdit>
+#include <QGridLayout>
+#include <QPushButton>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <map>
@@ -33,6 +37,7 @@ public slots:
     void saveFile();
     void saveFileAs();
     void closeFile();
+    void newAnimation();
     void setKeyframe();
     void deleteKeyframe();
     void copyPose();
@@ -137,5 +142,39 @@ private:
     static const int FPS = 24;
 
     enum { NO_SKELETON_MODE, STICK_MODE };
+
+    class NewAnimDialog: public QDialog
+    {   
+    public:
+        QString getAnimName(){return setAnimName->text();}
+        int getAnimLen(){bool ok; return setAnimLen->text().toInt(&ok, 10);}
+        NewAnimDialog(QWidget *parent) : QDialog(parent)
+        {
+            setModal(true);
+            setFocusPolicy(Qt::StrongFocus);
+            setFocus();
+            setAnimName = new QLineEdit(this);
+            setAnimLen = new QLineEdit(this);
+            setAnimLen->setInputMask(tr("9999"));
+            acceptButton = new QPushButton(tr("OK"));
+            connect(acceptButton, SIGNAL(clicked()), this, SLOT(accept()));
+            cancelButton = new QPushButton(tr("Cancel"));
+            connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
+
+            QGridLayout *layout = new QGridLayout;
+            layout->addWidget(setAnimName, 0, 0);
+            layout->addWidget(setAnimLen, 1, 0);
+            layout->addWidget(acceptButton, 2, 0);
+            layout->addWidget(cancelButton, 2, 1);
+            setLayout(layout);
+            exec();
+        }
+    private:
+        QPushButton *acceptButton;
+        QPushButton *cancelButton;
+        QLineEdit *setAnimName;
+        QLineEdit *setAnimLen;
+    };
+
 };
 

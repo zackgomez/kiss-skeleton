@@ -34,6 +34,7 @@ private:
 
     QAction *autoSkinAct;
 
+    QAction *newAnimation;
     QAction *setKeyframe;
     QAction *delKeyframe;
     QAction *copyPose;
