@@ -64,8 +64,8 @@ public:
     Joint* getJoint(unsigned index);
 
     void setBoneHeadPos(Bone *b, const glm::vec3 &worldPos);
-    void translateBone(Bone *b, const glm::vec3 &worldDelta);
-    void translateTail(Bone *b, const glm::vec3 &worldDelta);
+    void  setBoneMidPos(Bone *b, const glm::vec3 &worldDelta);
+    void setBoneTailPos(Bone *b, const glm::vec3 &worldDelta);
 
     void setPose(const SkeletonPose *sp);
 

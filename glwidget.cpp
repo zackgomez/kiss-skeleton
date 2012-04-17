@@ -611,11 +611,11 @@ void GLWidget::setTranslationVec(const glm::vec2 &clickPos)
     translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
 
     // If we got here, then it's a valid drag and translationVec is already set
-    std::cout << "Translation drag.  vec: " << translationVec << '\n';
     dragging = true;
     dragStart = clickPos;
     // starting position of axis in world coords
     startingPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix()), centerNDC);
+    std::cout << "Translation drag.  vec: " << translationVec << " startingPos: " << startingPos << '\n';
 }
 
 void GLWidget::setRotationVec(const glm::vec2 &clickPos)
@@ -725,9 +725,9 @@ void GLWidget::setBoneTranslation(Bone* bone, const glm::vec2 &dragPos)
     if (selectedObject == OBJ_HEAD)
         skeleton->setBoneHeadPos(bone, finalPos);
     else if (selectedObject == OBJ_BONE)
-        skeleton->translateBone(bone, deltaPos);
+        skeleton->setBoneMidPos(bone, finalPos);
     else if (selectedObject == OBJ_TIP)
-        skeleton->translateTail(bone, deltaPos);
+        skeleton->setBoneTailPos(bone, finalPos);
 }
 
 void GLWidget::setBoneRotation(Bone* bone, const glm::vec2 &dragPos)
@@ -796,7 +796,6 @@ void GLWidget::renderEditGrid() const
 
 void GLWidget::renderBone(const Bone *bone)
 {
-    std::cout << "rendering bone " << bone->name << '\n';
     const Joint *joint = bone->joint;
     const glm::mat4 viewMat = getViewMatrix();
     const glm::mat4 headMat = joint->worldTransform;

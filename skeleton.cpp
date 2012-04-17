@@ -107,17 +107,25 @@ void Skeleton::setBoneHeadPos(Bone *b, const glm::vec3 &worldPos)
 
     b->joint->pos = parentPos;
 
+    // TODO update the parent tailPos to parentPos as well
+    // TODO what if that affects other children??
+
     updateTransforms();
 }
 
-void Skeleton::translateBone(Bone *b, const glm::vec3 &worldDelta)
+void Skeleton::setBoneMidPos(Bone *b, const glm::vec3 &worldDelta)
 {
     // TODO
 }
 
-void Skeleton::translateTail(Bone *b, const glm::vec3 &worldDelta)
+void Skeleton::setBoneTailPos(Bone *b, const glm::vec3 &worldPos)
 {
-    // TODO
+    glm::vec3 pos = applyMatrix(glm::inverse(b->joint->worldTransform), worldPos);
+    b->tipPos = pos;
+
+    // TODO update all child bones->joint to have correct position
+
+    updateTransforms();
 }
 
 void Skeleton::setPose(const SkeletonPose *sp)
