@@ -17,7 +17,7 @@ const glm::vec3 GLWidget::ACTIVE_COLOR = glm::vec3(0.8f, 0.4f, 0.2f);
 const float GLWidget::AXIS_LENGTH = 0.10f; // ndc
 const float GLWidget::CIRCLE_RADIUS= 0.12f; //ndc
 const float GLWidget::SCALE_CIRCLE_RADIUS = 0.15f; //ndc
-const float GLWidget::SELECT_THRESH = 0.02f;
+const float GLWidget::SELECT_THRESH = 0.01f;
 const int GLWidget::NO_MESH_MODE = 0;
 const int GLWidget::SKINNING_MODE = 1;
 const int GLWidget::POSING_MODE = 2;
@@ -39,10 +39,9 @@ static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
 GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
     renderSelected(true),
-    selectedJoint(NULL),
-    skeletonMode(NO_SKELETON_MODE),
+    selectedBone(NULL),
     meshMode(NO_MESH_MODE),
-    editMode(ROTATION_MODE),
+    editMode(TRANSLATION_MODE),
     localMode(false),
     dragging(false),
     rotating(false), translating(false), zooming(false)
@@ -51,6 +50,8 @@ GLWidget::GLWidget(QWidget *parent) :
     skeleton = NULL;
     bindPose = NULL;
     copiedPose = NULL;
+
+    selectedObject = OBJ_HEAD;
 
     rmesh = NULL;
     verts = NULL;
@@ -73,6 +74,9 @@ QSize GLWidget::sizeHint() const
 void GLWidget::newFile()
 {
     closeFile();
+
+    // Create a blank skeleton, with only a root node
+    skeleton = new Skeleton();
 }
 
 void GLWidget::openFile(const QString &path)
@@ -111,14 +115,12 @@ void GLWidget::openFile(const QString &path)
         if (skeleton)
         {
             bindPose = skeleton->currentPose();
-            jointNDC.resize(skeleton->getJoints().size());
         }
         free(data);
     }
 
     gsm_close(f);
 
-    skeletonMode = skeleton ? STICK_MODE : NO_SKELETON_MODE;
     meshMode = rmesh ?
         (skeleton ? POSING_MODE : SKINNING_MODE) :
         NO_MESH_MODE;
@@ -171,10 +173,8 @@ void GLWidget::importBones()
     skeleton = newskel;
     delete bindPose;
     bindPose = skeleton->currentPose();
-    jointNDC.resize(skeleton->getJoints().size());
 
     meshMode = rmesh ? SKINNING_MODE : NO_MESH_MODE;
-    skeletonMode = STICK_MODE;
 }
 
 void GLWidget::autoSkinMesh()
@@ -259,7 +259,6 @@ void GLWidget::closeFile()
     verts = NULL;
     nverts = 0;
 
-    skeletonMode = NO_SKELETON_MODE;
     meshMode = NO_MESH_MODE;
 
     currentFile.clear();
@@ -313,11 +312,28 @@ void GLWidget::paintGL()
     renderEditGrid();
 
     // Render the joints
-    if (skeletonMode != NO_SKELETON_MODE)
+    if (skeleton)
     {
-        const std::vector<Joint*> joints = skeleton->getJoints();
-        for (size_t i = 0; i < joints.size(); i++)
-            renderJoint(viewMatrix, joints[i], joints);
+        const std::vector<Bone*> bones = skeleton->getBones();
+        for (size_t i = 0; i < bones.size(); i++)
+            renderBone(bones[i]);
+        // now render and ui on the selectedBone
+        if (selectedBone)
+        {
+            if (editMode == TRANSLATION_MODE)
+            {
+                // either, head, bone or tip
+                glm::vec3 axisPos = glm::vec3(0.f); // default to head
+                if (selectedObject == OBJ_BONE)
+                    axisPos = 0.5f * selectedBone->tipPos;
+                else if (selectedObject == OBJ_TIP)
+                    axisPos = selectedBone->tipPos;
+
+                glm::mat4 axisMat = glm::translate(selectedBone->joint->worldTransform,
+                        axisPos);
+                renderAxes(axisMat);
+            }
+        }
     }
 
     // And the mesh
@@ -343,9 +359,9 @@ void GLWidget::paintGL()
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
     // Render points ineither mode
-    if (selectedJoint && rmesh && renderSelected)
+    if (selectedBone && rmesh && renderSelected)
     {
-        renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
+        renderSelectedPoints(viewMatrix, rmesh, selectedBone->joint->index,
                 glm::vec4(0,1,0,1));
     }
 }
@@ -391,7 +407,7 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton && !dragging)
     {
         // If no joint selected, nothing to do
-        if (!selectedJoint) return;
+        if (!selectedBone) return;
 
         if (editMode == TRANSLATION_MODE)
             setTranslationVec(screenCoord);
@@ -418,26 +434,68 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
         else if (event->modifiers() == Qt::SHIFT)
             translating = true;
     }
-    // Right mouse selects and deselects joints/points
+    // Right mouse selects and deselects bone
     else if (event->button() == Qt::RightButton)
     {
-        selectedJoint = NULL;
-
-        // Find closest joint
-        float nearest = HUGE_VAL;
-        for (size_t i = 0; i < jointNDC.size(); i++)
-        {
-            const glm::vec3 &ndc = jointNDC[i];
-            float dist = glm::length(screenCoord - glm::vec2(ndc));
-            if (dist < SELECT_THRESH && ndc.z < nearest)
-            {
-                selectedJoint = skeleton->getJoint(i);
-                nearest = ndc.z;
-            }
-        }
+        selectBone(screenCoord);
     }
 
     updateGL();
+}
+
+void GLWidget::selectBone(const glm::vec2 &screenCoord)
+{
+    // Constants
+    static const float END_SELECT_THRESH = 0.015f;
+    static const float BODY_SELECT_THRESH = 0.01f;
+    // reset
+    selectedBone = NULL;
+    selectedObject = OBJ_NONE;
+
+    float bestdist = HUGE_VAL;
+    Bone *bestbone = NULL;
+    int bestobj = OBJ_NONE;
+
+    const std::vector<Bone *> bones = skeleton->getBones();
+    for (size_t i = 0; i < bones.size(); i++)
+    {
+        Bone* b = bones[i];
+        const glm::mat4 fullMat = getProjectionMatrix() * getViewMatrix() * b->joint->worldTransform;
+        const glm::vec2 headpos = glm::vec2(applyMatrix(fullMat, glm::vec3(0.f)));
+        const glm::vec2 tailpos = glm::vec2(applyMatrix(fullMat, b->tipPos));
+
+        // Calculate the three distances
+        // distance from click to line...
+        float bonedist = pointLineDist(headpos, tailpos, screenCoord);
+        float headdist = glm::length(headpos - screenCoord);
+        float taildist = glm::length(tailpos - screenCoord);
+
+        // Prefer the head to tail to body
+        if (headdist < END_SELECT_THRESH && headdist < bestdist)
+        {
+            bestdist = headdist;
+            bestbone = b;
+            bestobj = OBJ_HEAD;
+        }
+        else if (taildist < END_SELECT_THRESH && taildist < bestdist)
+        {
+            bestdist = taildist;
+            bestbone = b;
+            bestobj = OBJ_TIP;
+        }
+        else if (bonedist < BODY_SELECT_THRESH && bonedist < bestdist)
+        {
+            bestdist = bonedist;
+            bestbone = b;
+            bestobj = OBJ_BONE;
+        }
+    }
+
+    if (bestbone)
+    {
+        selectedBone = bestbone;
+        selectedObject = bestobj;
+    }
 }
 
 void GLWidget::mouseReleaseEvent(QMouseEvent *event)
@@ -486,14 +544,14 @@ void GLWidget::mouseMoveEvent(QMouseEvent *event)
     else if (dragging)
     {
         // If no joint selected, nothing to do
-        assert(selectedJoint);
+        assert(selectedBone);
 
         if (editMode == TRANSLATION_MODE)
-            setJointPosition(selectedJoint, screenCoord);
+            setBoneTranslation(selectedBone, screenCoord);
         else if (editMode == ROTATION_MODE)
-            setJointRotation(selectedJoint, screenCoord);
+            setBoneRotation(selectedBone, screenCoord);
         else if (editMode == SCALE_MODE)
-            setJointScale(selectedJoint, screenCoord);
+            setBoneScale(selectedBone, screenCoord);
         else
             assert(false && "Unknown edit mode");
     }
@@ -518,23 +576,22 @@ void GLWidget::setTranslationVec(const glm::vec2 &clickPos)
     const float axisDistThresh = 5.f / std::max(windowWidth, windowHeight);
     const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
 
-    glm::vec3 selJointNDC = jointNDC[selectedJoint->index];
-
-    glm::vec3 clickNDC(clickPos, selJointNDC.z);
+    glm::vec3 centerNDC = axisNDC[3];
+    glm::vec3 clickNDC(clickPos, centerNDC.z);
 
     // figure out what the vector is (i.e. what they clicked on, if anything)
     // First see if they clicked too far away
-    float dist = glm::length(clickNDC - selJointNDC);
+    float dist = glm::length(clickNDC - centerNDC);
     if (dist > CIRCLE_RADIUS + circleDistThresh)
         return;
 
     translationVec = glm::vec3(0.f);
     // now see if they clicked on any of the axis lines, within margin
-    if (pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[0]), glm::vec2(clickNDC)) < axisDistThresh)
+    if (pointLineDist(glm::vec2(centerNDC), glm::vec2(axisNDC[0]), glm::vec2(clickNDC)) < axisDistThresh)
         translationVec.x = 1.f;
-    else if (pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC)) < axisDistThresh)
+    else if (pointLineDist(glm::vec2(centerNDC), glm::vec2(axisNDC[1]), glm::vec2(clickNDC)) < axisDistThresh)
         translationVec.y = 1.f;
-    else if (pointLineDist(glm::vec2(selJointNDC), glm::vec2(axisNDC[2]), glm::vec2(clickNDC)) < axisDistThresh)
+    else if (pointLineDist(glm::vec2(centerNDC), glm::vec2(axisNDC[2]), glm::vec2(clickNDC)) < axisDistThresh)
         translationVec.z = 1.f;
 
     // Now the vector is either set, or they didn't click on an axis vector
@@ -546,24 +603,27 @@ void GLWidget::setTranslationVec(const glm::vec2 &clickPos)
 
     // If they choose an axis translation vector, we need to make sure that it's in the
     // correct (parent) space
+    Joint *parentjoint = selectedBone->joint;
     if (localMode)
-        translationVec = applyMatrix(selectedJoint->worldTransform, translationVec, false);
-    glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ?
-        glm::mat4(1.f) : skeleton->getJoint(selectedJoint->parent)->worldTransform;
+        translationVec = applyMatrix(parentjoint->worldTransform, translationVec, false);
+    glm::mat4 parentTransform = parentjoint->parent == Skeleton::ROOT_PARENT ?
+        glm::mat4(1.f) : skeleton->getJoint(parentjoint->parent)->worldTransform;
     translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
 
     // If we got here, then it's a valid drag and translationVec is already set
     std::cout << "Translation drag.  vec: " << translationVec << '\n';
     dragging = true;
     dragStart = clickPos;
-    startingPos = selectedJoint->pos;
+    // starting position of axis in world coords
+    startingPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix()), centerNDC);
 }
 
 void GLWidget::setRotationVec(const glm::vec2 &clickPos)
 {
+    /*
     const float axisDistThresh = 5.f / glm::max(windowWidth, windowHeight);
     const float arcDistThresh = 0.003f;
-    glm::vec3 selJointNDC = jointNDC[selectedJoint->index];
+    glm::vec3 selJointNDC = boneNDC[selectedBone];
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
     const float r = AXIS_LENGTH;
 
@@ -602,26 +662,29 @@ void GLWidget::setRotationVec(const glm::vec2 &clickPos)
 
     // Transform the rotation vector into parent space so that the transformation
     // is around the global axes
-    glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(selectedJoint->parent)->worldTransform;
+    Joint *parentJoint = selectedBone->joint;
+    glm::mat4 parentTransform = parentJoint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(parentJoint->parent)->worldTransform;
     rotationVec = globalVec;
     if (localMode)
-        rotationVec = applyMatrix(selectedJoint->worldTransform, rotationVec, false);
+        rotationVec = applyMatrix(parentJoint->worldTransform, rotationVec, false);
     rotationVec = applyMatrix(glm::inverse(parentTransform), rotationVec, false);
     // Save startign rotation as quat
-    startingRot = axisAngleToQuat(selectedJoint->rot);
+    startingRot = axisAngleToQuat(parentJoint->rot);
 
     dragging = true;
     dragStart = clickPos;
 
     std::cout << "Rotation drag.  axis: " << globalVec << "  vec: " << rotationVec << '\n';
+    */
 }
 
 void GLWidget::setScaleVec(const glm::vec2 &clickPos)
 {
+    /*
     // pixels to NDC
     const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
 
-    glm::vec3 selJointNDC = jointNDC[selectedJoint->index];
+    glm::vec3 selJointNDC = boneNDC[selectedBone];
 
     glm::vec3 clickNDC(clickPos, selJointNDC.z);
 
@@ -631,48 +694,51 @@ void GLWidget::setScaleVec(const glm::vec2 &clickPos)
         return;
     dragging = true;
     dragStart = clickPos;
-    startingScale = selectedJoint->scale;
+    startingScale = selectedBone->joint->scale;
     std::cout << "Scale drag.\n";
+    */
 }
 
-void GLWidget::setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
+void GLWidget::setBoneTranslation(Bone* bone, const glm::vec2 &dragPos)
 {
     if (dragPos == glm::vec2(HUGE_VAL))
         return;
-    glm::mat4 parentWorld = joint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+    const glm::mat4 worldMat = getProjectionMatrix() * getViewMatrix();
+    const glm::mat4 inverseWorldMat = glm::inverse(worldMat);
 
-    // Get the positions of the two mouse positions in parent joint space
-    glm::vec3 startParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
-            glm::vec3(dragStart, jointNDC[selectedJoint->index].z));
-    glm::vec3 mouseParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
-            glm::vec3(dragPos, jointNDC[selectedJoint->index].z));
+    // Get the positions of the two mouse positions in world space
+    glm::vec3 startWorldPos = applyMatrix(inverseWorldMat, glm::vec3(dragStart, axisNDC[3].z));
+    glm::vec3 mouseWorldPos = applyMatrix(inverseWorldMat, glm::vec3(dragPos, axisNDC[3].z));
 
     // project on translation vector if necessary
     if (translationVec != glm::vec3(0.f))
     {
-        startParentPos = glm::dot(startParentPos, translationVec) * translationVec;
-        mouseParentPos = glm::dot(mouseParentPos, translationVec) * translationVec;
+        startWorldPos = glm::dot(startWorldPos, translationVec) * translationVec;
+        mouseWorldPos = glm::dot(mouseWorldPos, translationVec) * translationVec;
     }
 
     // Delta is trivial to compute now
-    glm::vec3 deltaPos = mouseParentPos - startParentPos;
+    glm::vec3 deltaPos = mouseWorldPos - startWorldPos;
+    glm::vec3 finalPos = startingPos + deltaPos;
 
-    // Finally, set the joint pose
-    JointPose pose;
-    pose.rot = joint->rot;
-    pose.scale = joint->scale;
-    pose.pos = startingPos + deltaPos;
-    skeleton->setPose(selectedJoint->index, &pose);
+    // Update correct position
+    if (selectedObject == OBJ_HEAD)
+        skeleton->setBoneHeadPos(bone, finalPos);
+    else if (selectedObject == OBJ_BONE)
+        skeleton->translateBone(bone, deltaPos);
+    else if (selectedObject == OBJ_TIP)
+        skeleton->translateTail(bone, deltaPos);
 }
 
-void GLWidget::setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
+void GLWidget::setBoneRotation(Bone* bone, const glm::vec2 &dragPos)
 {
-    glm::vec3 ndcCoord(dragPos, jointNDC[selectedJoint->index].z);
+    /*
+    glm::vec3 ndcCoord(dragPos, boneNDC[bone].z);
     if (dragPos == glm::vec2(HUGE_VAL))
         return;
     if (dragStart == dragPos)
         return;
-    glm::vec2 center(jointNDC[selectedJoint->index]);
+    glm::vec2 center(boneNDC[bone]);
 
     glm::vec2 starting = glm::normalize(dragStart - center);
     glm::vec2 current  = glm::normalize(dragPos - center);
@@ -683,23 +749,28 @@ void GLWidget::setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
 
     glm::quat newrot = deltarot * startingRot;
 
+    const Joint *parentJoint = bone->joint;
     JointPose newpose;
-    newpose.pos = joint->pos;
-    newpose.scale = joint->scale;
+    newpose.pos = parentJoint->pos;
+    newpose.scale = parentJoint->scale;
     newpose.rot = quatToAxisAngle(newrot);
 
-    skeleton->setPose(selectedJoint->index, &newpose);
+    skeleton->setPose(parentJoint->index, &newpose);
+    */
 }
 
-void GLWidget::setJointScale(const Joint* joint, const glm::vec2 &dragPos)
+void GLWidget::setBoneScale(Bone* bone, const glm::vec2 &dragPos)
 {
-    glm::vec2 boneNDC(jointNDC[selectedJoint->index]);
-    float newScale = glm::length(dragPos - boneNDC) / SCALE_CIRCLE_RADIUS;
+    /*
+    glm::vec2 center(boneNDC[bone]);
+    float newScale = glm::length(dragPos - center) / SCALE_CIRCLE_RADIUS;
+    const Joint *parentJoint = bone->joint;
     JointPose pose;
-    pose.rot = joint->rot;
-    pose.pos = joint->pos;
+    pose.rot = parentJoint->rot;
+    pose.pos = parentJoint->pos;
     pose.scale = newScale;
-    skeleton->setPose(selectedJoint->index, &pose);
+    skeleton->setPose(parentJoint->index, &pose);
+    */
 }
 
 void GLWidget::renderEditGrid() const
@@ -723,66 +794,39 @@ void GLWidget::renderEditGrid() const
     glEnd();
 }
 
-void GLWidget::renderJoint(const glm::mat4 &transform, const Joint* joint,
-        const std::vector<Joint*> joints)
+void GLWidget::renderBone(const Bone *bone)
 {
-    // Draw cube
-    glLoadMatrixf(glm::value_ptr(glm::scale(transform * joint->worldTransform,
-                    glm::vec3(0.08f))));
-    if (joint == selectedJoint)
+    std::cout << "rendering bone " << bone->name << '\n';
+    const Joint *joint = bone->joint;
+    const glm::mat4 viewMat = getViewMatrix();
+    const glm::mat4 headMat = joint->worldTransform;
+
+    // Set color
+    if (bone == selectedBone)
         glColor3fv(glm::value_ptr(ACTIVE_COLOR));
     else
         glColor3f(1, 1, 1);
+
+    // Draw cube for head of bone
+    glLoadMatrixf(glm::value_ptr(glm::scale(viewMat * headMat,
+                    glm::vec3(0.08f))));
     renderCube();
 
-    const glm::vec3 worldPos = applyMatrix(joint->worldTransform, glm::vec3(0,0,0));
-
-    // Render axis (x,y,z lines) if necessary
-    if (editMode == TRANSLATION_MODE && joint == selectedJoint)
-    {
-        renderAxes(transform, worldPos);
-    }
-    else if (editMode == ROTATION_MODE && joint == selectedJoint)
-    {
-        renderRotationSphere(transform, worldPos);
-    }
-    else if (editMode == SCALE_MODE && joint == selectedJoint)
-    {
-        renderScaleCircle(transform * joint->scale, worldPos);
-    }
-    // Record joint NDC coordinates
-    glm::mat4 ptrans = getProjectionMatrix();
-    glm::mat4 fullTransform = ptrans * transform * joint->worldTransform;
-    glm::vec4 jointndc(0,0,0,1);
-    jointndc = fullTransform * jointndc;
-    jointndc /= jointndc.w;
-    jointNDC[joint->index] = glm::vec3(jointndc);
-
-    // No "bone" to draw for root
-    if (joint->parent == 255)
-        return;
-
-    glLoadMatrixf(glm::value_ptr(transform));
-
-    glm::mat4 parentTransform = joints[joint->parent]->worldTransform;
-    glm::mat4 boneTransform = joint->worldTransform;
-
-    glm::vec4 start(0, 0, 0, 1), end(0, 0, 0, 1);
-    start = parentTransform * start;
-    start /= start.w;
-    end = boneTransform * end;
-    end /= end.w;
-
+    // Draw line connected head and tail
+    glLoadMatrixf(glm::value_ptr(viewMat * headMat));
     glBegin(GL_LINES);
-    glColor3f(1, 0, 0);
-    glVertex4fv(&start.x);
-
-    glColor3f(0, 1, 0);
-    glVertex4fv(&end.x);
+    glVertex3f(0.f, 0.f, 0.f);
+    glVertex3fv(glm::value_ptr(bone->tipPos));
     glEnd();
+
+    // draw tail
+    const glm::mat4 tailMat = glm::scale(glm::translate(headMat, bone->tipPos),
+            glm::vec3(0.08f));
+    glLoadMatrixf(glm::value_ptr(viewMat * tailMat));
+    renderCube();
 }
 
-void GLWidget::renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoord)
+void GLWidget::renderAxes(const glm::mat4 &modelMat)
 {
     // Render in NDC coordinates, no projection matrix needed
     glMatrixMode(GL_PROJECTION);
@@ -790,12 +834,16 @@ void GLWidget::renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoor
     glLoadIdentity();
     glMatrixMode(GL_MODELVIEW);
 
-    // ndc coord of axis center
-    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
+    const glm::mat4 projMat = getProjectionMatrix();
+    const glm::mat4 viewMat = getViewMatrix();
+    const glm::mat4 fullMat = projMat * viewMat * modelMat;
 
-    glm::mat4 axisTransform = getProjectionMatrix() * transform;
+    // ndc coord of axis center
+    glm::vec3 ndcCoord = applyMatrix(fullMat, glm::vec3(0.f));
+
+    glm::mat4 axisTransform = projMat * viewMat;
     if (localMode)
-        axisTransform = axisTransform * selectedJoint->worldTransform;
+        axisTransform = axisTransform * modelMat;
 
     glm::vec3 xdir = applyMatrix(axisTransform, glm::vec3(1,0,0), false);
     glm::vec3 ydir = applyMatrix(axisTransform, glm::vec3(0,1,0), false);
@@ -824,6 +872,7 @@ void GLWidget::renderAxes(const glm::mat4 &transform, const glm::vec3 &worldCoor
     axisNDC[0] = xp1;
     axisNDC[1] = yp1;
     axisNDC[2] = zp1;
+    axisNDC[3] = ndcCoord;
 
     // render and record an enclosing circle
     glm::mat4 circleTransform = glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), glm::vec3(CIRCLE_RADIUS));
@@ -883,7 +932,7 @@ void GLWidget::renderRotationSphere(const glm::mat4 &transform, const glm::vec3 
 
     glm::mat4 axisTrans = transform;
     if (localMode)
-        axisTrans = axisTrans * selectedJoint->worldTransform;
+        axisTrans = axisTrans * selectedBone->joint->worldTransform;
     glm::vec3 xdir = glm::normalize(applyMatrix(axisTrans, glm::vec3(1,0,0), false));
     glm::vec3 ydir = glm::normalize(applyMatrix(axisTrans, glm::vec3(0,1,0), false));
     glm::vec3 zdir = glm::normalize(applyMatrix(axisTrans, glm::vec3(0,0,1), false));

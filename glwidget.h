@@ -18,6 +18,7 @@ class Skeleton;
 struct SkeletonPose;
 class Joint;
 struct graph;
+struct Bone;
 
 class GLWidget : public QGLWidget
 {
@@ -69,14 +70,14 @@ private:
 
     int windowWidth, windowHeight;
     SkeletonPose *bindPose, *copiedPose;
-    const Joint* selectedJoint;
+    Bone* selectedBone;
+    int selectedObject; // head, bone, tip
 
-    int skeletonMode, meshMode, editMode;
+    int meshMode, editMode;
     bool localMode;
 
     // graphics -> UI vars
-    std::vector<glm::vec3> jointNDC;
-    glm::vec3 axisNDC[3];
+    glm::vec3 axisNDC[4]; // x, y, z, center
     glm::vec3 axisDir[3];
     glm::vec3 circleNDC;
 
@@ -91,21 +92,21 @@ private:
     float startingScale;
 
     // Skeleton editing functions
+    void selectBone(const glm::vec2 &screenCoord);
     void setTranslationVec(const glm::vec2 &clickPos);
     void setRotationVec(const glm::vec2 &clickPos);
     void setScaleVec(const glm::vec2 &clickPos);
-    void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
-    void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
-    void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
+    void setBoneTranslation(Bone* joint, const glm::vec2 &dragPos);
+    void setBoneRotation(Bone* joint, const glm::vec2 &dragPos);
+    void setBoneScale(Bone* joint, const glm::vec2 &dragPos);
     // Timeline functions
     void setPoseFromFrame(int frame);
     void setFrame(int frame);
 
     // Rendering helpers
     void renderEditGrid() const;
-    void renderJoint(const glm::mat4 &transform, const Joint *joint,
-            const std::vector<Joint*> joints);
-    void renderAxes(const glm::mat4 &transform, const glm::vec3 &center);
+    void renderBone(const Bone *bone);
+    void renderAxes(const glm::mat4 &modelTransform);
     void renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &center);
     void renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &center);
     void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
@@ -126,6 +127,6 @@ private:
     static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
     static const int NO_MESH_MODE, SKINNING_MODE, POSING_MODE;
 
-    enum { NO_SKELETON_MODE, STICK_MODE };
+    enum { OBJ_NONE, OBJ_HEAD, OBJ_BONE, OBJ_TIP };
 };
 

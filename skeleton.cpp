@@ -22,6 +22,13 @@ Skeleton::Skeleton()
     root->worldTransform = glm::mat4(1.f);
     root->inverseBindTransform = glm::mat4(1.f);
     joints_.push_back(root);
+
+    Bone *rbone = new Bone;
+    rbone->name = "root";
+    rbone->joint = root;
+    rbone->tipPos = glm::vec3(1, 0, 0);
+
+    bones_.push_back(rbone);
 }
 
 Skeleton::~Skeleton()
@@ -74,22 +81,43 @@ const std::vector<Bone*> Skeleton::getBones() const
     return bones_;
 }
 
-const Joint* Skeleton::getJoint(unsigned index) const
+Joint* Skeleton::getJoint(unsigned index)
 {
     assert(index < joints_.size());
     return joints_[index];
 }
 
-void Skeleton::setPose(unsigned index, const JointPose *pose)
+Bone* Skeleton::getBone(const std::string name)
 {
-    // first find the joint and update it
-    joints_[index]->rot = pose->rot;
-    joints_[index]->pos = pose->pos;
-    joints_[index]->scale = pose->scale;
-    // Then update the global transforms for it and all joints that might
-    // depend on it
-    for (size_t i = index; i < joints_.size(); i++)
-        setWorldTransform(joints_[i]);
+    for (size_t i = 0; i < bones_.size(); i++)
+        if (bones_[i]->name == name)
+            return bones_[i];
+
+    printf("WARNING: bone '%s' not found.\n", name.c_str());
+    return NULL;
+}
+
+void Skeleton::setBoneHeadPos(Bone *b, const glm::vec3 &worldPos)
+{
+    glm::mat4 parentTransform = b->joint->parent == ROOT_PARENT ?
+        glm::mat4(1.f) :
+        joints_[b->joint->parent]->worldTransform;
+
+    glm::vec3 parentPos = applyMatrix(glm::inverse(parentTransform), worldPos);
+
+    b->joint->pos = parentPos;
+
+    updateTransforms();
+}
+
+void Skeleton::translateBone(Bone *b, const glm::vec3 &worldDelta)
+{
+    // TODO
+}
+
+void Skeleton::translateTail(Bone *b, const glm::vec3 &worldDelta)
+{
+    // TODO
 }
 
 void Skeleton::setPose(const SkeletonPose *sp)
@@ -132,6 +160,12 @@ SkeletonPose* Skeleton::currentPose() const
     return pose;
 }
 
+void Skeleton::updateTransforms()
+{
+    for (size_t i = 0; i < joints_.size(); i++)
+        setWorldTransform(joints_[i]);
+}
+
 void Skeleton::setWorldTransform(Joint *joint)
 {
     // Set transform as pa
@@ -163,24 +197,4 @@ void freeSkeletonPose(SkeletonPose *sp)
     for (size_t i = 0; i < sp->poses.size(); i++)
         delete sp->poses[i];
 }
-
-glm::vec3 Bone::p0() const
-{
-    glm::vec3 parentpos = applyMatrix(joint->worldTransform, glm::vec3(0.f));
-    return parentpos;
-}
-
-glm::vec3 Bone::p1() const
-{
-    if (childjoint)
-        return applyMatrix(childjoint->worldTransform, glm::vec3(0.f));
-    else
-        return applyMatrix(joint->worldTransform, endpt);
-}
-
-float Bone::length() const
-{
-    return glm::length(p1() - p0());
-}
-
 

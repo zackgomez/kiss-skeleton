@@ -5,10 +5,11 @@
 #include <glm/glm.hpp>
 #include <cstdio>
 
+struct Bone;
 struct Joint
 {
     glm::vec4 rot; // x,y,z, angle
-    glm::vec3 pos;
+    glm::vec3 pos; // relative to head of last bone
     float scale;
 
     unsigned index;
@@ -16,6 +17,16 @@ struct Joint
 
     glm::mat4 worldTransform;
     glm::mat4 inverseBindTransform;
+};
+
+struct Bone
+{
+    std::string name;
+    Joint *joint; // the joint at the head of this bone, controls the verts
+    glm::vec3 tipPos; // position of the tip ibonen bone space
+
+    //parent
+    //children
 };
 
 struct JointPose
@@ -30,20 +41,6 @@ struct SkeletonPose
     std::vector<JointPose*> poses;
 };
 
-// TODO a comment
-struct Bone
-{
-    std::string name;
-    Joint *joint;
-    // only one of the next two will be valid
-    Joint *childjoint; // NULL when not a joint, just a point
-    glm::vec3 endpt;
-
-    // These functions return the world position of the bone
-    glm::vec3 p0() const;
-    glm::vec3 p1() const;
-    float length() const;
-};
 
 class Skeleton
 {
@@ -62,9 +59,14 @@ public:
 
     const std::vector<Joint*> getJoints() const;
     const std::vector<Bone*> getBones() const;
-    const Joint* getJoint(unsigned index) const;
 
-    void setPose(unsigned index, const JointPose *pose);
+    Bone* getBone(const std::string name);
+    Joint* getJoint(unsigned index);
+
+    void setBoneHeadPos(Bone *b, const glm::vec3 &worldPos);
+    void translateBone(Bone *b, const glm::vec3 &worldDelta);
+    void translateTail(Bone *b, const glm::vec3 &worldDelta);
+
     void setPose(const SkeletonPose *sp);
 
     // Sets the current pose as the bind pose
@@ -81,6 +83,7 @@ private:
     std::vector<Joint*> joints_;
     std::vector<Bone*> bones_;
 
+    void updateTransforms();
     void setWorldTransform(Joint* bone);
     void clearSkeleton();
 };
