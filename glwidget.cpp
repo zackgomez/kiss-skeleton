@@ -6,6 +6,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "glwidget.h"
+#include "mainwindow.h"
 #include "Arcball.h"
 #include "kiss-skeleton.h"
 #include "libgsm.h"
@@ -75,112 +76,6 @@ QSize GLWidget::sizeHint() const
     return QSize(800, 1000);
 }
 
-void GLWidget::newFile()
-{
-    closeFile();
-}
-
-void GLWidget::openFile(const QString &path)
-{
-    closeFile();
-
-    gsm *f = gsm_open(path.toAscii());
-    
-    if (!f)
-    {
-        // TODO display error dialog
-        return;
-    }
-
-    size_t len;
-    char *data = (char *) gsm_mesh_contents(f, len);
-    if (data)
-    {
-        bool skinned = true;
-        rmesh = readRawMesh(data, len, skinned);
-        verts = createSkinnedVertArray(rmesh, &nverts);
-        free(data);
-    }
-
-    data = (char *) gsm_bones_contents(f, len);
-    if (data)
-    {
-        skeleton = new Skeleton();
-        if (skeleton->readSkeleton(data, len))
-        {
-            free(skeleton);
-            skeleton = NULL;
-            QMessageBox::information(this, tr("Error reading GSM File"),
-                    tr("Unable to parse bones file."));
-        }
-        if (skeleton)
-        {
-            bindPose = skeleton->currentPose();
-            jointNDC.resize(skeleton->getJoints().size());
-        }
-        free(data);
-    }
-
-    gsm_close(f);
-
-    skeletonMode = skeleton ? STICK_MODE : NO_SKELETON_MODE;
-    meshMode = rmesh ?
-        (skeleton ? POSING_MODE : SKINNING_MODE) :
-        NO_MESH_MODE;
-    
-    currentFile = path;
-
-    paintGL();
-}
-
-void GLWidget::importModel()
-{
-    QString filename = QFileDialog::getOpenFileName(this, tr("Import Model"),
-            ".", tr("OBJ Files (*.obj)"));
-
-    if (filename.isEmpty()) return;
-
-    bool skinned = true;
-    rawmesh *newmesh = loadRawMesh(filename.toAscii(), skinned);
-    if (!newmesh)
-        QMessageBox::information(this, tr("Unable to import mesh"),
-                tr("Couldn't parse mesh file"));
-
-    freeRawMesh(rmesh);
-    free(verts);
-    rmesh = newmesh;
-    verts = createSkinnedVertArray(rmesh, &nverts);
-
-    meshMode = skeleton && skinned ? POSING_MODE : SKINNING_MODE;
-}
-
-void GLWidget::importBones()
-{
-    // TODO use a "set skeleton function"
-    QString filename = QFileDialog::getOpenFileName(this, tr("Import Bones"),
-            ".", tr("Skeleton Files (*.bones)"));
-
-    if (filename.isEmpty()) return;
-
-    Skeleton *newskel = new Skeleton();
-    
-    if (newskel->readSkeleton(filename.toStdString()))
-    {
-        QMessageBox::information(this, tr("Unable to import skeleton"),
-                tr("Couldn't parse bones file"));
-        delete newskel;
-        return;
-    }
-
-    delete skeleton;
-    skeleton = newskel;
-    delete bindPose;
-    bindPose = skeleton->currentPose();
-    jointNDC.resize(skeleton->getJoints().size());
-
-    meshMode = rmesh ? SKINNING_MODE : NO_MESH_MODE;
-    skeletonMode = STICK_MODE;
-}
 
 void GLWidget::autoSkinMesh()
 {
@@ -200,131 +95,6 @@ void GLWidget::autoSkinMesh()
     std::cout << "auto skinning complete\n";
 }
 
-void GLWidget::saveFile()
-{
-    std::cout << "saveFile()\n";
-    if (currentFile.isEmpty()) return;
-    writeGSM(currentFile);
-}
-
-void GLWidget::saveFileAs()
-{
-    std::cout << "saveFileAs()\n";
-    QString path = QFileDialog::getSaveFileName(this, tr("Save GSM"),
-            currentFile, tr("GSM Files (*.gsm)"));
-    if (!path.isEmpty())
-        writeGSM(path);
-}
-
-void GLWidget::writeGSM(const QString &path)
-{
-    gsm *gsmf;
-    if (!(gsmf = gsm_open(path.toAscii())))
-    {
-        QMessageBox::information(this, tr("Unable to open gsm file"),
-                tr("TODO There should be an error message here..."));
-        return;
-    }
-
-    if (skeleton)
-    {
-        std::cout << "writing skeleton\n";
-        assert(bindPose);
-        FILE *bonef = tmpfile();
-        assert(bonef);
-        writeSkeleton(bonef, skeleton, bindPose);
-        gsm_set_bones(gsmf, bonef);
-    }
-    if (rmesh)
-    {
-        std::cout << "writing mesh\n";
-        FILE *meshf = tmpfile();
-        assert(meshf);
-        writeRawMesh(rmesh, meshf);
-        gsm_set_mesh(gsmf, meshf);
-    }
-
-    gsm_close(gsmf);
-}
-
-void GLWidget::closeFile()
-{
-    std::cout << "GLWidget::closeFile()\n";
-    delete skeleton;
-    skeleton = NULL;
-    freeSkeletonPose(bindPose);
-    bindPose = NULL;
-
-    freeRawMesh(rmesh);
-    rmesh = NULL;
-    free(verts);
-    verts = NULL;
-    nverts = 0;
-
-    skeletonMode = NO_SKELETON_MODE;
-    meshMode = NO_MESH_MODE;
-
-    currentFile.clear();
-
-    paintGL();
-
-    // TODO clear timeline/keyframes
-}
-
-void GLWidget::newAnimation()
-{
-    NewAnimDialog *animDialog = new NewAnimDialog(this);
-    if (animDialog->result() != QDialog::Accepted) return;
-    animation* anim = new animation;
-    anim->endFrame = animDialog->getAnimLen();
-    std::string animName = animDialog->getAnimName().toStdString();
-    // Not ok if anim length not positive
-    bool ok = anim->endFrame > 0;
-    QString errormsg = tr("Invalid length; cannot be negative!");
-    // Not ok if another animation has the same name
-    for (auto it = tdata_->animations.begin(); it < tdata_->animations.end(); it++)
-        if (animName == (*it)->name)
-        {
-            ok = false;
-            errormsg = tr("Animation name already used!");
-        }
-    if (!ok)
-    {
-        QMessageBox::information(this, tr("Error!"), errormsg);
-        return;
-    }
-    anim->name = animName; 
-    tdata_->animations.push_back(anim);
-    tdata_->currentAnimation = anim;
-    std::cout << "New animation made: " << anim->name << ", length: " << anim->endFrame << std::endl;
-}
-void GLWidget::setKeyframe()
-{
-    if (skeleton == NULL) return;
-    tdata_->currentAnimation->keyframes[tdata_->currentFrame] = skeleton->currentPose();
-    updateGL();
-}
-
-void GLWidget::deleteKeyframe()
-{
-    tdata_->currentAnimation->keyframes.erase(tdata_->currentFrame);
-    updateGL();
-}
-
-void GLWidget::copyPose()
-{
-    if (skeleton == NULL) return;
-    delete copiedPose;
-    copiedPose = skeleton->currentPose();
-    updateGL();
-}
-
-void GLWidget::pastePose()
-{
-    if (skeleton == NULL) return;
-    skeleton->setPose(copiedPose);
-    updateGL();
-}
 
 void GLWidget::initializeGL()
 {
@@ -407,7 +177,7 @@ void GLWidget::paintGL()
     }
 
     // render timeline
-    tdisplay_->render();
+    tdisplay_->repaint();
 }
 
 void GLWidget::resizeGL(int width, int height)
@@ -786,57 +556,6 @@ void GLWidget::setJointScale(const Joint* joint, const glm::vec2 &dragPos)
     skeleton->setPose(selectedJoint->index, &pose);
 }
 
-void GLWidget::setPoseFromFrame(int frame)
-{
-    if (tdata_->currentAnimation->keyframes.count(frame) > 0)
-    {
-        skeleton->setPose(tdata_->currentAnimation->keyframes[frame]);
-    } 
-    else if (tdata_->currentAnimation->keyframes.size() > 1)
-    {
-        int lastKeyframe = tdata_->currentFrame;
-        int nextKeyframe = tdata_->currentFrame;
-        while (tdata_->currentAnimation->keyframes.count(lastKeyframe) == 0 && lastKeyframe > 1) 
-            lastKeyframe--;
-        while (tdata_->currentAnimation->keyframes.count(nextKeyframe) == 0 && nextKeyframe < tdata_->currentAnimation->endFrame)
-            nextKeyframe++;
-        if (tdata_->currentAnimation->keyframes.count(lastKeyframe) == 0)
-            lastKeyframe = nextKeyframe;
-        if (tdata_->currentAnimation->keyframes.count(nextKeyframe) == 0)
-            nextKeyframe = lastKeyframe;
-        
-        // The normalized position of the current frame between the keyframes
-        float anim = 0.f;
-        if (nextKeyframe - lastKeyframe > 0)
-            anim = float(tdata_->currentFrame - lastKeyframe) / (nextKeyframe - lastKeyframe);
-
-		assert(tdata_->currentAnimation->keyframes.count(lastKeyframe) && tdata_->currentAnimation->keyframes.count(nextKeyframe));
-		const SkeletonPose *last = tdata_->currentAnimation->keyframes[lastKeyframe];
-		const SkeletonPose *next = tdata_->currentAnimation->keyframes[nextKeyframe];
-		assert(last->poses.size() == next->poses.size());
-
-		SkeletonPose* pose = new SkeletonPose;
-		pose->poses.resize(last->poses.size());
-        for (size_t i = 0; i < pose->poses.size(); i++)
-        {
-			JointPose *jp = pose->poses[i] = new JointPose;
-            glm::vec3 startPos = last->poses[i]->pos;
-            glm::vec3 endPos = next->poses[i]->pos;
-            jp->pos = startPos + (endPos - startPos) * anim;
-
-            glm::quat startRot = axisAngleToQuat(last->poses[i]->rot);
-            glm::quat endRot = axisAngleToQuat(next->poses[i]->rot);
-            jp->rot = quatToAxisAngle(glm::normalize((1.f - anim) * startRot + anim * endRot));
-
-            float startScale = last->poses[i]->scale;
-            float endScale = next->poses[i]->scale;
-            jp->scale = startScale + (endScale - startScale) * anim;
-        }
-
-        skeleton->setPose(pose);
-		freeSkeletonPose(pose);
-    }
-}
 
 void GLWidget::setFrame(int frame)
 {
@@ -847,7 +566,6 @@ void GLWidget::setFrame(int frame)
 
 void GLWidget::update()
 {
-    // TODO Couldn't this be done with a mod?
     setFrame(tdata_->currentFrame % tdata_->currentAnimation->endFrame + 1);
 }
 

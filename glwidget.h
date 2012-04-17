@@ -6,17 +6,14 @@
 #include <QLineEdit>
 #include <QGridLayout>
 #include <QPushButton>
+#include <QLabel>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <map>
 #include "Arcball.h"
 #include "zgfx.h"
-#include "glsubdisplay.h"
 
 class Arcball;
-class Skeleton;
-struct SkeletonPose;
-class Joint;
 
 class GLWidget : public QGLWidget
 {
@@ -27,22 +24,6 @@ public:
 
     QSize minimumSizeHint() const;
     QSize sizeHint() const;
-
-public slots:
-    void newFile();
-// TODO no arg
-    void openFile(const QString &path);
-    void importModel();
-    void importBones();
-    void saveFile();
-    void saveFileAs();
-    void closeFile();
-    void newAnimation();
-    void setKeyframe();
-    void deleteKeyframe();
-    void copyPose();
-    void pastePose();
-    void autoSkinMesh();
 
 protected:
     void initializeGL();
@@ -63,7 +44,6 @@ private slots:
 private:
     // Data members
     Arcball *arcball;
-    Skeleton *skeleton;
     shader *shaderProgram;
     rawmesh *rmesh;
     vert_p4t2n3j8 *verts;
@@ -71,10 +51,8 @@ private:
 
     bool renderSelected;
 
-    QString currentFile;
 
     int windowWidth, windowHeight, timelineHeight;
-    SkeletonPose *bindPose, *copiedPose;
     const Joint* selectedJoint;
 
     int skeletonMode, meshMode, editMode;
@@ -86,9 +64,6 @@ private:
     glm::vec3 axisDir[3];
     glm::vec3 circleNDC;
 
-    // timeline ui vars
-    QTimer *animTimer;
-    bool play;
 
     // UI state vars
     bool dragging;
@@ -100,9 +75,6 @@ private:
     glm::quat startingRot;
     float startingScale;
 
-    // Timeline vars
-    timeline_data *tdata_;
-    TimelineDisplay *tdisplay_;
 
     // Skeleton editing functions
     void setTranslationVec(const glm::vec2 &clickPos);
@@ -111,9 +83,6 @@ private:
     void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
     void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
     void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
-    // Timeline functions
-    void setPoseFromFrame(int frame);
-    void setFrame(int frame);
 
     // Rendering helpers
     void renderEditGrid() const;
@@ -139,42 +108,9 @@ private:
     static const float SELECT_THRESH;
     static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
     static const int NO_MESH_MODE, SKINNING_MODE, POSING_MODE;
-    static const int FPS = 24;
 
     enum { NO_SKELETON_MODE, STICK_MODE };
 
-    class NewAnimDialog: public QDialog
-    {   
-    public:
-        QString getAnimName(){return setAnimName->text();}
-        int getAnimLen(){bool ok; return setAnimLen->text().toInt(&ok, 10);}
-        NewAnimDialog(QWidget *parent) : QDialog(parent)
-        {
-            setModal(true);
-            setFocusPolicy(Qt::StrongFocus);
-            setFocus();
-            setAnimName = new QLineEdit(this);
-            setAnimLen = new QLineEdit(this);
-            setAnimLen->setInputMask(tr("9999"));
-            acceptButton = new QPushButton(tr("OK"));
-            connect(acceptButton, SIGNAL(clicked()), this, SLOT(accept()));
-            cancelButton = new QPushButton(tr("Cancel"));
-            connect(cancelButton, SIGNAL(clicked()), this, SLOT(reject()));
-
-            QGridLayout *layout = new QGridLayout;
-            layout->addWidget(setAnimName, 0, 0);
-            layout->addWidget(setAnimLen, 1, 0);
-            layout->addWidget(acceptButton, 2, 0);
-            layout->addWidget(cancelButton, 2, 1);
-            setLayout(layout);
-            exec();
-        }
-    private:
-        QPushButton *acceptButton;
-        QPushButton *cancelButton;
-        QLineEdit *setAnimName;
-        QLineEdit *setAnimLen;
-    };
 
 };
 
