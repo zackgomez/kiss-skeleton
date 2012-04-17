@@ -566,7 +566,7 @@ void GLWidget::setFrame(int frame)
 
 void GLWidget::update()
 {
-    setFrame(tdata_->currentFrame % tdata_->currentAnimation->endFrame + 1);
+    // setFrame(tdata_->currentFrame % tdata_->currentAnimation->endFrame + 1);
 }
 
 void GLWidget::renderEditGrid() const

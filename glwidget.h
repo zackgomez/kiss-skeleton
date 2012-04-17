@@ -14,6 +14,9 @@
 #include "zgfx.h"
 
 class Arcball;
+class Skeleton;
+class Joint;
+class SkeletonPose;
 
 class GLWidget : public QGLWidget
 {
