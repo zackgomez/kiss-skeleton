@@ -11,8 +11,6 @@ struct Joint
     glm::vec3 pos;
     float scale;
 
-    std::string name;
-    
     unsigned index;
     unsigned parent;
 
@@ -32,18 +30,40 @@ struct SkeletonPose
     std::vector<JointPose*> poses;
 };
 
+// TODO a comment
+struct Bone
+{
+    std::string name;
+    Joint *joint;
+    // only one of the next two will be valid
+    Joint *childjoint; // NULL when not a joint, just a point
+    glm::vec3 endpt;
+
+    // These functions return the world position of the bone
+    glm::vec3 p0() const;
+    glm::vec3 p1() const;
+    float length() const;
+};
+
 class Skeleton
 {
 public:
+    // Returns null on error
+    static Skeleton * readSkeleton(const std::string &filename);
+    // Returns null on error
+    static Skeleton * readSkeleton(const char *text, size_t len);
+
+    // Creates a skeleton with only a root node
     Skeleton();
     ~Skeleton();
 
-    int readSkeleton(const std::string &filename);
-    int readSkeleton(const char *text, size_t len);
+    size_t numJoints() const;
+    size_t numBones() const;
 
     const std::vector<Joint*> getJoints() const;
-    const Joint* getJoint(const std::string &name) const;
+    const std::vector<Bone*> getBones() const;
     const Joint* getJoint(unsigned index) const;
+
     void setPose(unsigned index, const JointPose *pose);
     void setPose(const SkeletonPose *sp);
 
@@ -59,15 +79,11 @@ public:
 
 private:
     std::vector<Joint*> joints_;
+    std::vector<Bone*> bones_;
 
     void setWorldTransform(Joint* bone);
-    int readJoint(const std::string &jointstr);
-    void clearJoints();
+    void clearSkeleton();
 };
 
-
 void freeSkeletonPose(SkeletonPose *sp);
-void writeSkeleton(const char *filename, const Skeleton *skeleton,
-        const SkeletonPose *bindPose);
-void writeSkeleton(FILE *f, const Skeleton *Skeleton,
-        const SkeletonPose *bindPose);
+

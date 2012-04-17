@@ -7,7 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "glwidget.h"
 #include "Arcball.h"
-#include "kiss-skeleton.h"
+#include "skeleton.h"
 #include "libgsm.h"
 #include "meshops.h"
 
@@ -39,7 +39,6 @@ static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
 GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
     renderSelected(true),
-    timelineHeight(200),
     selectedJoint(NULL),
     skeletonMode(NO_SKELETON_MODE),
     meshMode(NO_MESH_MODE),
@@ -55,11 +54,6 @@ GLWidget::GLWidget(QWidget *parent) :
 
     rmesh = NULL;
     verts = NULL;
-
-    // timeline vars
-    tdata_ = new timeline_data();
-    tdata_->currentFrame = 1;
-    tdisplay_ = new TimelineDisplay(this, tdata_);
 }
 
 GLWidget::~GLWidget()
@@ -231,12 +225,13 @@ void GLWidget::writeGSM(const QString &path)
 
     if (skeleton)
     {
-        std::cout << "writing skeleton\n";
-        assert(bindPose);
-        FILE *bonef = tmpfile();
-        assert(bonef);
-        writeSkeleton(bonef, skeleton, bindPose);
-        gsm_set_bones(gsmf, bonef);
+        // TODO
+        //std::cout << "writing skeleton\n";
+        //assert(bindPose);
+        //FILE *bonef = tmpfile();
+        //assert(bonef);
+        //writeSkeleton(bonef, skeleton, bindPose);
+        //gsm_set_bones(gsmf, bonef);
     }
     if (rmesh)
     {
@@ -274,61 +269,6 @@ void GLWidget::closeFile()
     // TODO clear timeline/keyframes
 }
 
-void GLWidget::newAnimation()
-{
-    NewAnimDialog *animDialog = new NewAnimDialog(this);
-    if (animDialog->result() != QDialog::Accepted) return;
-    animation* anim = new animation;
-    anim->endFrame = animDialog->getAnimLen();
-    std::string animName = animDialog->getAnimName().toStdString();
-    // Not ok if anim length not positive
-    bool ok = anim->endFrame > 0;
-    QString errormsg = tr("Invalid length; cannot be negative!");
-    // Not ok if another animation has the same name
-    for (auto it = tdata_->animations.begin(); it < tdata_->animations.end(); it++)
-        if (animName == (*it)->name)
-        {
-            ok = false;
-            errormsg = tr("Animation name already used!");
-        }
-    if (!ok)
-    {
-        QMessageBox::information(this, tr("Error!"), errormsg);
-        return;
-    }
-    anim->name = animName; 
-    tdata_->animations.push_back(anim);
-    tdata_->currentAnimation = anim;
-    std::cout << "New animation made: " << anim->name << ", length: " << anim->endFrame << std::endl;
-}
-void GLWidget::setKeyframe()
-{
-    if (skeleton == NULL) return;
-    tdata_->currentAnimation->keyframes[tdata_->currentFrame] = skeleton->currentPose();
-    updateGL();
-}
-
-void GLWidget::deleteKeyframe()
-{
-    tdata_->currentAnimation->keyframes.erase(tdata_->currentFrame);
-    updateGL();
-}
-
-void GLWidget::copyPose()
-{
-    if (skeleton == NULL) return;
-    delete copiedPose;
-    copiedPose = skeleton->currentPose();
-    updateGL();
-}
-
-void GLWidget::pastePose()
-{
-    if (skeleton == NULL) return;
-    skeleton->setPose(copiedPose);
-    updateGL();
-}
-
 void GLWidget::initializeGL()
 {
     GLenum err = glewInit();
@@ -357,8 +297,8 @@ void GLWidget::paintGL()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // render main view
-    glViewport(0, timelineHeight, windowWidth, windowHeight - timelineHeight);
-    arcball->setAspect((float) windowWidth / (windowHeight - timelineHeight));
+    glViewport(0, 0, windowWidth, windowHeight);
+    arcball->setAspect((float) windowWidth / windowHeight);
     glMatrixMode(GL_PROJECTION);
     glm::mat4 projMatrix = arcball->getProjectionMatrix();
     glLoadMatrixf(glm::value_ptr(projMatrix));
@@ -408,16 +348,12 @@ void GLWidget::paintGL()
         renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
                 glm::vec4(0,1,0,1));
     }
-
-    // render timeline
-    tdisplay_->render();
 }
 
 void GLWidget::resizeGL(int width, int height)
 {
     windowWidth = width;
     windowHeight = height;
-    tdisplay_->setViewport(0, 0, windowWidth, timelineHeight);
 }
 
 void GLWidget::keyPressEvent(QKeyEvent *e)
@@ -440,22 +376,6 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
         editMode = TRANSLATION_MODE;
     else if (e->key() == Qt::Key_S)
         editMode = SCALE_MODE;
-    else if (e->key() == Qt::Key_Space)
-    {
-        play = !play;
-        if (play)
-        {
-            animTimer = new QTimer(this);
-            connect(animTimer, SIGNAL(timeout()), this, SLOT(update()));
-            animTimer->start(1000 / FPS);
-        }
-        else
-        {
-            animTimer->stop();
-        }
-    }
-    else
-        QWidget::keyPressEvent(e);
 
     updateGL();
 }
@@ -465,61 +385,54 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
     if (dragging || translating || zooming || rotating)
         return;
     int x = event->x(), y = windowHeight-event->y();
-    // Timeline events
-    if (tdisplay_->contains(x, y))
-        tdisplay_->mousePressEvent(event, x, y);
-    // Handle main window events
-    else 
+
+    glm::vec2 screenCoord = clickToScreenPos(x, y);
+    // Left button possibly starts an edit
+    if (event->button() == Qt::LeftButton && !dragging)
     {
-        assert(y > timelineHeight);
-        glm::vec2 screenCoord = clickToScreenPos(x, y);
-        // Left button possibly starts an edit
-        if (event->button() == Qt::LeftButton && !dragging)
-        {
-            // If no joint selected, nothing to do
-            if (!selectedJoint) return;
+        // If no joint selected, nothing to do
+        if (!selectedJoint) return;
 
-            if (editMode == TRANSLATION_MODE)
-                setTranslationVec(screenCoord);
-            else if (editMode == ROTATION_MODE)
-                setRotationVec(screenCoord);
-            else if (editMode == SCALE_MODE)
-                setScaleVec(screenCoord);
-            else
-                assert(false && "unknown mode");
-        }
-        // Middle button adjusts camera
-        else if (event->button() == Qt::MidButton)
-        {
-            glm::vec3 ndc(screenCoord, 0.f);
-            arcball->start(ndc);
-            dragStart = screenCoord;
-            zoomStart = arcball->getZoom();
+        if (editMode == TRANSLATION_MODE)
+            setTranslationVec(screenCoord);
+        else if (editMode == ROTATION_MODE)
+            setRotationVec(screenCoord);
+        else if (editMode == SCALE_MODE)
+            setScaleVec(screenCoord);
+        else
+            assert(false && "unknown mode");
+    }
+    // Middle button adjusts camera
+    else if (event->button() == Qt::MidButton)
+    {
+        glm::vec3 ndc(screenCoord, 0.f);
+        arcball->start(ndc);
+        dragStart = screenCoord;
+        zoomStart = arcball->getZoom();
 
-            // No button is arcball rotation
-            if (!event->modifiers())
-                rotating = true;
-            else if (event->modifiers() == Qt::CTRL)
-                zooming = true;
-            else if (event->modifiers() == Qt::SHIFT)
-                translating = true;
-        }
-        // Right mouse selects and deselects joints/points
-        else if (event->button() == Qt::RightButton)
-        {
-            selectedJoint = NULL;
+        // No button is arcball rotation
+        if (!event->modifiers())
+            rotating = true;
+        else if (event->modifiers() == Qt::CTRL)
+            zooming = true;
+        else if (event->modifiers() == Qt::SHIFT)
+            translating = true;
+    }
+    // Right mouse selects and deselects joints/points
+    else if (event->button() == Qt::RightButton)
+    {
+        selectedJoint = NULL;
 
-            // Find closest joint
-            float nearest = HUGE_VAL;
-            for (size_t i = 0; i < jointNDC.size(); i++)
+        // Find closest joint
+        float nearest = HUGE_VAL;
+        for (size_t i = 0; i < jointNDC.size(); i++)
+        {
+            const glm::vec3 &ndc = jointNDC[i];
+            float dist = glm::length(screenCoord - glm::vec2(ndc));
+            if (dist < SELECT_THRESH && ndc.z < nearest)
             {
-                const glm::vec3 &ndc = jointNDC[i];
-                float dist = glm::length(screenCoord - glm::vec2(ndc));
-                if (dist < SELECT_THRESH && ndc.z < nearest)
-                {
-                    selectedJoint = skeleton->getJoint(i);
-                    nearest = ndc.z;
-                }
+                selectedJoint = skeleton->getJoint(i);
+                nearest = ndc.z;
             }
         }
     }
@@ -787,71 +700,6 @@ void GLWidget::setJointScale(const Joint* joint, const glm::vec2 &dragPos)
     pose.pos = joint->pos;
     pose.scale = newScale;
     skeleton->setPose(selectedJoint->index, &pose);
-}
-
-void GLWidget::setPoseFromFrame(int frame)
-{
-    if (tdata_->currentAnimation->keyframes.count(frame) > 0)
-    {
-        skeleton->setPose(tdata_->currentAnimation->keyframes[frame]);
-    } 
-    else if (tdata_->currentAnimation->keyframes.size() > 1)
-    {
-        int lastKeyframe = tdata_->currentFrame;
-        int nextKeyframe = tdata_->currentFrame;
-        while (tdata_->currentAnimation->keyframes.count(lastKeyframe) == 0 && lastKeyframe > 1) 
-            lastKeyframe--;
-        while (tdata_->currentAnimation->keyframes.count(nextKeyframe) == 0 && nextKeyframe < tdata_->currentAnimation->endFrame)
-            nextKeyframe++;
-        if (tdata_->currentAnimation->keyframes.count(lastKeyframe) == 0)
-            lastKeyframe = nextKeyframe;
-        if (tdata_->currentAnimation->keyframes.count(nextKeyframe) == 0)
-            nextKeyframe = lastKeyframe;
-        
-        // The normalized position of the current frame between the keyframes
-        float anim = 0.f;
-        if (nextKeyframe - lastKeyframe > 0)
-            anim = float(tdata_->currentFrame - lastKeyframe) / (nextKeyframe - lastKeyframe);
-
-		assert(tdata_->currentAnimation->keyframes.count(lastKeyframe) && tdata_->currentAnimation->keyframes.count(nextKeyframe));
-		const SkeletonPose *last = tdata_->currentAnimation->keyframes[lastKeyframe];
-		const SkeletonPose *next = tdata_->currentAnimation->keyframes[nextKeyframe];
-		assert(last->poses.size() == next->poses.size());
-
-		SkeletonPose* pose = new SkeletonPose;
-		pose->poses.resize(last->poses.size());
-        for (size_t i = 0; i < pose->poses.size(); i++)
-        {
-			JointPose *jp = pose->poses[i] = new JointPose;
-            glm::vec3 startPos = last->poses[i]->pos;
-            glm::vec3 endPos = next->poses[i]->pos;
-            jp->pos = startPos + (endPos - startPos) * anim;
-
-            glm::quat startRot = axisAngleToQuat(last->poses[i]->rot);
-            glm::quat endRot = axisAngleToQuat(next->poses[i]->rot);
-            jp->rot = quatToAxisAngle(glm::normalize((1.f - anim) * startRot + anim * endRot));
-
-            float startScale = last->poses[i]->scale;
-            float endScale = next->poses[i]->scale;
-            jp->scale = startScale + (endScale - startScale) * anim;
-        }
-
-        skeleton->setPose(pose);
-		freeSkeletonPose(pose);
-    }
-}
-
-void GLWidget::setFrame(int frame)
-{
-    tdata_->currentFrame = frame;
-    setPoseFromFrame(frame);
-    updateGL();
-}
-
-void GLWidget::update()
-{
-    // TODO Couldn't this be done with a mod?
-    setFrame(tdata_->currentFrame % tdata_->currentAnimation->endFrame + 1);
 }
 
 void GLWidget::renderEditGrid() const
@@ -1145,7 +993,7 @@ glm::mat4 GLWidget::getViewMatrix() const
 
 glm::vec2 GLWidget::clickToScreenPos(int x, int y) const
 {
-    glm::vec2 screencoord((float)x / windowWidth, (float)(y - timelineHeight) / (windowHeight - timelineHeight));
+    glm::vec2 screencoord((float)x / windowWidth, (float)y / windowHeight);
     screencoord -= glm::vec2(0.5f);
     screencoord *= 2.f;
 

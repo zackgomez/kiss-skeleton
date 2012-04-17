@@ -3,7 +3,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <queue>
-#include "kiss-skeleton.h"
+#include "skeleton.h"
 #include "zgfx.h"
 
 graph_node *
@@ -474,6 +474,7 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
             weights[4*vi + wi] /= sum;
         
         // Some prints..
+        /*
         printf("(vert %zu) ", vi);
         for (size_t wi = 0; wi < 4; wi++)
         {
@@ -485,6 +486,7 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
                 printf("[%d %s %f] ", joint, skeljoints[joint]->name.c_str(), weight);
         }
         printf("\n");
+        */
     }
 
     return g;

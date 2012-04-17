@@ -2,10 +2,9 @@ INCLUDEPATH  += glm-0.9.2.7
 CONFIG       += debug
 QMAKE_CXXFLAGS += -std=c++0x
 
-
 HEADERS       = glwidget.h \
                 arcball.h \
-                kiss-skeleton.h \
+                skeleton.h \
                 zgfx.h \
                 mainwindow.h \
                 libgsm.h \
@@ -14,7 +13,7 @@ HEADERS       = glwidget.h \
 SOURCES       = glwidget.cpp \
                 qtmain.cpp \
                 arcball.cpp \
-                kiss-skeleton.cpp \
+                skeleton.cpp \
                 zgfx.cpp \
                 mainwindow.cpp \
                 libgsm.cpp \
