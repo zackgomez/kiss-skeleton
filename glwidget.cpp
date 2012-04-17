@@ -408,11 +408,6 @@ void GLWidget::paintGL()
         renderSelectedPoints(viewMatrix, rmesh, selectedJoint->index,
                 glm::vec4(0,1,0,1));
     }
-    if (selectedJoint && rmesh && vertgraph)
-    {
-        renderWeightedPoints(viewMatrix, rmesh, 
-                vertgraph, selectedJoint->index, glm::vec4(0.8f, 0.8f, 0.2f, 1));
-    }
 
     // render timeline
     tdisplay_->render();

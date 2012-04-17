@@ -349,8 +349,7 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 
     // For each vertex, find the closest joint and bind only to that vertex
     // to distance
-    vert  *verts   = rmesh->verts;
-    for (size_t i = 0; i < rmesh->nverts; i++)
+    for (size_t i = 0; i < g->nodes.size(); i++)
     {
         // cache vert position
         graph_node *node = g->nodes[i];
@@ -375,7 +374,7 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
 
             // Calculate the integral
             float score = 0.f;
-            const float dlambda = 0.5f;
+            const float dlambda = 0.1f;
             for (float lambda = 0; lambda <= 1.f; lambda += dlambda)
             {
                 // current point along bone (b^i_\lambda)
