@@ -328,103 +328,8 @@ smoothWeights(graph *g)
     }
 }
 
-graph *
-autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
+void assignWeights(rawmesh *rmesh, graph *g)
 {
-    // Requires a mesh with skinning data
-    assert(rmesh && rmesh->joints && rmesh->weights);
-
-    // Make a graph representation of the mesh
-    printf("Creating graph structure.\n");
-    graph *g = make_graph(rmesh);
-    printf("nodes in graph: %zu\n", g->nodes.size());
-
-    // Get all the joint world positions for easy access
-    std::vector<glm::vec3> jointPos;
-    const std::vector<Joint*> skeljoints = skeleton->getJoints();
-    jointPos = std::vector<glm::vec3>(skeljoints.size());
-    for (size_t i = 0; i < skeljoints.size(); i++)
-        jointPos[i] = applyMatrix(skeljoints[i]->worldTransform, glm::vec3(0.f));
-
-
-    // For each vertex, find the closest joint and bind only to that vertex
-    // to distance
-    for (size_t i = 0; i < g->nodes.size(); i++)
-    {
-        // cache vert position
-        graph_node *node = g->nodes[i];
-        const glm::vec3 vert = glm::vec3(node->pos);
-        const glm::vec3 norm = node->norm;
-        // Reset joint scores
-        std::vector<float> jointScores(jointPos.size(), -HUGE_VAL);
-
-        // fill in the weights
-        for (size_t j = 0; j < jointPos.size(); j++)
-        {
-            int targetJoint = -1;
-            // Figure out the end points of the bone
-            if (skeljoints[j]->parent == Skeleton::ROOT_PARENT)
-                continue;
-            const Joint *parent = skeljoints[skeljoints[j]->parent];
-            targetJoint = parent->index;
-            // points defining the bone line
-            glm::vec3 p0 = jointPos[targetJoint];
-            glm::vec3 p1 = jointPos[j];
-            glm::vec3 pdir = glm::normalize(p1 - p0); // a^i (direction of bone)
-
-            // Calculate the integral
-            float score = 0.f;
-            const float dlambda = 0.1f;
-            for (float lambda = 0; lambda <= 1.f; lambda += dlambda)
-            {
-                // current point along bone (b^i_\lambda)
-                glm::vec3 cur = lambda * (p1 - p0) + p0;
-                // Direction from point to vert (d^i_\lambda)
-                glm::vec3 dij = vert - cur;
-                float mag2dir = glm::dot(dij, dij);
-                glm::vec3 dir = glm::normalize(dij);
-                // visibility test, term goes to zero if not visible
-                if (pointVisibleToPoint(cur, vert, rmesh) != -1) continue;
-
-                float term = 1.f;
-                // Model the proportion of illuminated line (sine of the angle)
-                // T^i_j(\lambda) = || d^i_j x a^i ||
-                term *= glm::length(glm::cross(dir, pdir));
-                // Proportion of recieved light (lambertian), includes angle of
-                // incidence and an r^2 falloff
-                // R^i_j(\lambda) = max(d^i_\lambda . n_j, 0) / ||d_\lambda||^2
-                term *= glm::max(glm::dot(dir, norm), 0.f) / mag2dir;
-
-                // accumulate integral
-                score += term * dlambda;
-            }
-
-            // l^i term in front of integral, (bone length)
-            score *= glm::length(p1 - p0);
-
-            // assign if non zero score
-            if (score > 0.f)
-                jointScores[targetJoint] = score;
-        }
-
-        // Assign to vertex for smoothing
-        g->nodes[i]->weights = jointScores;
-
-        // Done assigning initial values to this vert...
-        printf("i: %zu / %zu\n", i + 1, rmesh->nverts);
-    }
-    printf("Finished assigning initial weights.\n");
-
-    // TODO smooth weights
-    // First remove "rogues" i.e. patches of weightings that don't make any
-    // sense given the graph structure
-    rogueRemoval(g, skeleton);
-
-    // Fixes completely unassigned verts
-    //gapFill(g);
-    //smoothWeights(g);
-
-
     // Finally, assign the weights to the mesh, only take top 4, and apply some
     // thresholding
     int   *joints  = rmesh->joints;
@@ -472,22 +377,116 @@ autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
             sum += weights[4*vi + wi];
         for (size_t wi = 0; wi < 4; wi++)
             weights[4*vi + wi] /= sum;
-        
+
         // Some prints..
         /*
-        printf("(vert %zu) ", vi);
-        for (size_t wi = 0; wi < 4; wi++)
-        {
-            const int joint = joints[4*vi + wi];
-            const float weight = weights[4*vi + wi];
-            if (joint == -1)
-                printf("[ ] ");
-            else
-                printf("[%d %s %f] ", joint, skeljoints[joint]->name.c_str(), weight);
-        }
-        printf("\n");
+           printf("(vert %zu) ", vi);
+           for (size_t wi = 0; wi < 4; wi++)
+           {
+           const int joint = joints[4*vi + wi];
+           const float weight = weights[4*vi + wi];
+           if (joint == -1)
+           printf("[ ] ");
+           else
+           printf("[%d %s %f] ", joint, skeljoints[joint]->name.c_str(), weight);
+           }
+           printf("\n");
         */
     }
+}
+
+graph *
+autoSkinMeshBest(rawmesh *rmesh, const Skeleton *skeleton)
+{
+    // Requires a mesh with skinning data
+    assert(rmesh && rmesh->joints && rmesh->weights);
+
+    // Make a graph representation of the mesh
+    printf("Creating graph structure.\n");
+    graph *g = make_graph(rmesh);
+    printf("nodes in graph: %zu\n", g->nodes.size());
+
+    const std::vector<Joint*> joints = skeleton->getJoints();
+    const std::vector<Bone*>  bones  = skeleton->getBones();
+
+    printf("Skinning against %zu joints in %zu bones.\n", joints.size(),
+            bones.size());
+
+
+    // For each vertex, find the closest joint and bind only to that vertex
+    // to distance
+    for (size_t i = 0; i < g->nodes.size(); i++)
+    {
+        // cache vert position
+        graph_node *node = g->nodes[i];
+        const glm::vec3 vert = glm::vec3(node->pos);
+        const glm::vec3 norm = node->norm;
+        // Reset joint scores
+        std::vector<float> jointScores(joints.size(), -HUGE_VAL);
+
+        // fill in the weights
+        for (size_t j = 0; j < bones.size(); j++)
+        {
+            const Bone *bone = bones[j];
+            const Joint *joint = bones[j]->joint;
+            // points defining the bone line
+            glm::vec3 p0 = applyMatrix(joint->worldTransform, glm::vec3(0.f));
+            glm::vec3 p1 = applyMatrix(joint->worldTransform, bone->tipPos);
+            glm::vec3 pdir = glm::normalize(p1 - p0); // a^i (direction of bone)
+
+            // Calculate the integral
+            float score = 0.f;
+            const float dlambda = 0.1f;
+            for (float lambda = 0; lambda <= 1.f; lambda += dlambda)
+            {
+                // current point along bone (b^i_\lambda)
+                glm::vec3 cur = lambda * (p1 - p0) + p0;
+                // Direction from point to vert (d^i_\lambda)
+                glm::vec3 dij = vert - cur;
+                float mag2dir = glm::dot(dij, dij);
+                glm::vec3 dir = glm::normalize(dij);
+                // visibility test, term goes to zero if not visible
+                if (pointVisibleToPoint(cur, vert, rmesh) != -1) continue;
+
+                float term = 1.f;
+                // Model the proportion of illuminated line (sine of the angle)
+                // T^i_j(\lambda) = || d^i_j x a^i ||
+                term *= glm::length(glm::cross(dir, pdir));
+                // Proportion of recieved light (lambertian), includes angle of
+                // incidence and an r^2 falloff
+                // R^i_j(\lambda) = max(d^i_\lambda . n_j, 0) / ||d_\lambda||^2
+                term *= glm::max(glm::dot(dir, norm), 0.f) / mag2dir;
+
+                // accumulate integral
+                score += term * dlambda;
+            }
+
+            // l^i term in front of integral, (bone length)
+            score *= glm::length(p1 - p0);
+
+            // assign if non zero score
+            if (score > 0.f)
+                jointScores[joint->index] = score;
+        }
+
+        // Assign to vertex for smoothing
+        g->nodes[i]->weights = jointScores;
+
+        // Done assigning initial values to this vert...
+        printf("i: %zu / %zu\n", i + 1, rmesh->nverts);
+    }
+    printf("Finished assigning initial weights.\n");
+
+    // TODO smooth weights
+    // First remove "rogues" i.e. patches of weightings that don't make any
+    // sense given the graph structure
+    rogueRemoval(g, skeleton);
+
+    // Fixes completely unassigned verts
+    //gapFill(g);
+    //smoothWeights(g);
+
+    assignWeights(rmesh, g);
 
     return g;
 }

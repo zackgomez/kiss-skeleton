@@ -202,7 +202,6 @@ void Skeleton::removeBoneHelper(Bone *bone)
 
 void Skeleton::setBoneHeadPos(Bone *b, const glm::vec3 &worldPos)
 {
-    printf("%s: jparent: %zu parent: %d\n", b->name.c_str(), b->joint->parent, b->parent);
     glm::mat4 parentTransform = b->joint->parent == ROOT_PARENT ?
         glm::mat4(1.f) :
         joints_[b->joint->parent]->worldTransform;
