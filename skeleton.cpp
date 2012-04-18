@@ -236,6 +236,12 @@ void Skeleton::setBoneRotation(Bone *b, const glm::vec4 &rot)
     updateTransforms();
 }
 
+void Skeleton::setBoneScale(Bone *b, float scale)
+{
+    b->joint->scale = scale;
+    updateTransforms();
+}
+
 void Skeleton::setPose(const SkeletonPose *sp)
 {
     assert(sp->poses.size() == joints_.size());

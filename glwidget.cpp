@@ -335,10 +335,9 @@ void GLWidget::paintGL()
                 renderAxes(axisMat);
             }
             else if (editMode == ROTATION_MODE)
-            {
-                glm::mat4 axisMat = selectedBone->joint->worldTransform;
-                renderRotationSphere(axisMat);
-            }
+                renderRotationSphere(selectedBone->joint->worldTransform);
+            else if (editMode = SCALE_MODE)
+                renderScaleCircle(selectedBone->joint->worldTransform);
         }
     }
 
@@ -694,23 +693,17 @@ void GLWidget::setRotationVec(const glm::vec2 &clickPos)
 
 void GLWidget::setScaleVec(const glm::vec2 &clickPos)
 {
-    /*
     // pixels to NDC
     const float circleDistThresh = 8.f / std::max(windowWidth, windowHeight);
 
-    glm::vec3 selJointNDC = boneNDC[selectedBone];
-
-    glm::vec3 clickNDC(clickPos, selJointNDC.z);
-
     // First see if they clicked too far away
-    float dist = glm::length(clickNDC - selJointNDC);
+    float dist = glm::length(clickPos - glm::vec2(circleNDC));
     if (dist > SCALE_CIRCLE_RADIUS + circleDistThresh || dist < SCALE_CIRCLE_RADIUS - circleDistThresh)
         return;
     dragging = true;
     dragStart = clickPos;
     startingScale = selectedBone->joint->scale;
     std::cout << "Scale drag.\n";
-    */
 }
 
 void GLWidget::setBoneTranslation(Bone* bone, const glm::vec2 &dragPos)
@@ -763,16 +756,10 @@ void GLWidget::setBoneRotation(Bone* bone, const glm::vec2 &dragPos)
 
 void GLWidget::setBoneScale(Bone* bone, const glm::vec2 &dragPos)
 {
-    /*
-    glm::vec2 center(boneNDC[bone]);
+    glm::vec2 center(circleNDC);
     float newScale = glm::length(dragPos - center) / SCALE_CIRCLE_RADIUS;
-    const Joint *parentJoint = bone->joint;
-    JointPose pose;
-    pose.rot = parentJoint->rot;
-    pose.pos = parentJoint->pos;
-    pose.scale = newScale;
-    skeleton->setPose(parentJoint->index, &pose);
-    */
+
+    skeleton->setBoneScale(bone, newScale);
 }
 
 void GLWidget::renderEditGrid() const
@@ -910,7 +897,6 @@ void GLWidget::renderScaleCircle(const glm::mat4 &modelMat)
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
-
 }
 
 void GLWidget::renderRotationSphere(const glm::mat4 &modelMat)
