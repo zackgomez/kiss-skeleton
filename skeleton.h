@@ -25,8 +25,8 @@ struct Bone
     Joint *joint; // the joint at the head of this bone, controls the verts
     glm::vec3 tipPos; // position of the tip ibonen bone space
 
-    //parent
-    //children
+    Bone *parent;
+    std::vector<Bone*> children;
 };
 
 struct JointPose
@@ -54,20 +54,24 @@ public:
     Skeleton();
     ~Skeleton();
 
+    void setPose(const SkeletonPose *sp);
+    const std::vector<Joint*> getJoints() const;
+
+
+    // The following functions are for editting purposes
     size_t numJoints() const;
     size_t numBones() const;
 
-    const std::vector<Joint*> getJoints() const;
     const std::vector<Bone*> getBones() const;
 
     Bone* getBone(const std::string name);
     Joint* getJoint(unsigned index);
 
+    Bone* newBoneHead(Bone *parent, const std::string &name);
+    Bone* newBoneTail(Bone *parent, const std::string &name);
+    void removeBone(Bone *bone); // removes all children too
     void setBoneHeadPos(Bone *b, const glm::vec3 &worldPos);
-    void  setBoneMidPos(Bone *b, const glm::vec3 &worldDelta);
     void setBoneTailPos(Bone *b, const glm::vec3 &worldDelta);
-
-    void setPose(const SkeletonPose *sp);
 
     // Sets the current pose as the bind pose
     void setBindPose();
@@ -84,8 +88,9 @@ private:
     std::vector<Bone*> bones_;
 
     void updateTransforms();
-    void setWorldTransform(Joint* bone);
+    void setWorldTransform(Joint* joint);
     void clearSkeleton();
+    void removeBoneHelper(Bone *b);
 };
 
 void freeSkeletonPose(SkeletonPose *sp);

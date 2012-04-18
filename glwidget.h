@@ -127,6 +127,6 @@ private:
     static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
     static const int NO_MESH_MODE, SKINNING_MODE, POSING_MODE;
 
-    enum { OBJ_NONE, OBJ_HEAD, OBJ_BONE, OBJ_TIP };
+    enum { OBJ_NONE, OBJ_HEAD, OBJ_TIP };
 };
 

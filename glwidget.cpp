@@ -77,6 +77,7 @@ void GLWidget::newFile()
 
     // Create a blank skeleton, with only a root node
     skeleton = new Skeleton();
+    updateGL();
 }
 
 void GLWidget::openFile(const QString &path)
@@ -127,7 +128,7 @@ void GLWidget::openFile(const QString &path)
     
     currentFile = path;
 
-    paintGL();
+    updateGL();
 }
 
 void GLWidget::importModel()
@@ -252,6 +253,8 @@ void GLWidget::closeFile()
     skeleton = NULL;
     freeSkeletonPose(bindPose);
     bindPose = NULL;
+    selectedBone = NULL;
+    selectedObject = OBJ_NONE;
 
     freeRawMesh(rmesh);
     rmesh = NULL;
@@ -263,7 +266,7 @@ void GLWidget::closeFile()
 
     currentFile.clear();
 
-    paintGL();
+    updateGL();
 
     // TODO clear timeline/keyframes
 }
@@ -324,9 +327,7 @@ void GLWidget::paintGL()
             {
                 // either, head, bone or tip
                 glm::vec3 axisPos = glm::vec3(0.f); // default to head
-                if (selectedObject == OBJ_BONE)
-                    axisPos = 0.5f * selectedBone->tipPos;
-                else if (selectedObject == OBJ_TIP)
+                if (selectedObject == OBJ_TIP)
                     axisPos = selectedBone->tipPos;
 
                 glm::mat4 axisMat = glm::translate(selectedBone->joint->worldTransform,
@@ -392,6 +393,22 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
         editMode = TRANSLATION_MODE;
     else if (e->key() == Qt::Key_S)
         editMode = SCALE_MODE;
+    else if (e->key() == Qt::Key_N && selectedBone)
+    {
+        // TODO get a name
+        std::string name = "NEWBONE";
+        
+        selectedBone = selectedObject == OBJ_TIP ?
+            skeleton->newBoneTail(selectedBone, name) :
+            skeleton->newBoneHead(selectedBone, name);
+        selectedObject = OBJ_HEAD;
+    }
+    else if (e->key() == Qt::Key_D && selectedBone)
+    {
+        skeleton->removeBone(selectedBone);
+        selectedBone = NULL;
+        selectedObject = OBJ_NONE;
+    }
 
     updateGL();
 }
@@ -445,9 +462,10 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
 
 void GLWidget::selectBone(const glm::vec2 &screenCoord)
 {
+    if (!skeleton) return;
+
     // Constants
     static const float END_SELECT_THRESH = 0.015f;
-    static const float BODY_SELECT_THRESH = 0.01f;
     // reset
     selectedBone = NULL;
     selectedObject = OBJ_NONE;
@@ -466,7 +484,6 @@ void GLWidget::selectBone(const glm::vec2 &screenCoord)
 
         // Calculate the three distances
         // distance from click to line...
-        float bonedist = pointLineDist(headpos, tailpos, screenCoord);
         float headdist = glm::length(headpos - screenCoord);
         float taildist = glm::length(tailpos - screenCoord);
 
@@ -482,12 +499,6 @@ void GLWidget::selectBone(const glm::vec2 &screenCoord)
             bestdist = taildist;
             bestbone = b;
             bestobj = OBJ_TIP;
-        }
-        else if (bonedist < BODY_SELECT_THRESH && bonedist < bestdist)
-        {
-            bestdist = bonedist;
-            bestbone = b;
-            bestobj = OBJ_BONE;
         }
     }
 
@@ -724,8 +735,6 @@ void GLWidget::setBoneTranslation(Bone* bone, const glm::vec2 &dragPos)
     // Update correct position
     if (selectedObject == OBJ_HEAD)
         skeleton->setBoneHeadPos(bone, finalPos);
-    else if (selectedObject == OBJ_BONE)
-        skeleton->setBoneMidPos(bone, finalPos);
     else if (selectedObject == OBJ_TIP)
         skeleton->setBoneTailPos(bone, finalPos);
 }
