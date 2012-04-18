@@ -97,4 +97,5 @@ private:
 };
 
 void freeSkeletonPose(SkeletonPose *sp);
+void writeSkeleton(const Skeleton *skeleton, std::ostream &os);
 

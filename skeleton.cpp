@@ -353,3 +353,37 @@ void freeSkeletonPose(SkeletonPose *sp)
         delete sp->poses[i];
 }
 
+int findBoneIndex(const std::vector<Bone*> &bones, const Bone *b)
+{
+    for (size_t i = 0; i < bones.size(); i++)
+        if (bones[i] == b)
+            return i;
+    return -1;
+}
+
+void writeSkeleton(const Skeleton *skeleton, std::ostream &os)
+{
+    // Start by writing the joints
+    const std::vector<Joint*> joints = skeleton->getJoints();
+    for (size_t i = 0; i < joints.size(); i++)
+    {
+        const Joint *j = joints[i];
+        // index parent pos rot scale
+        os  << j->index << '\t' << j->parent << '\t' << j->pos << '\t'
+            << j->rot << '\t' << j->scale << '\n';
+    }
+
+    os << "\n\n";
+
+    // Now the bones
+    const std::vector<Bone*> bones = skeleton->getBones();
+    for (size_t i = 0; i < bones.size(); i++)
+    {
+        const Bone *b = bones[i];
+        int parentIndex = b->parent ? findBoneIndex(bones, b->parent) : -1;
+        // index name jointidx tipPos parent
+        os  << i << '\t' << b->name << '\t' << b->joint->index << '\t'
+            << b->tipPos << '\t' << parentIndex << '\n';
+    }
+}
+

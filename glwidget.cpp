@@ -233,6 +233,7 @@ void GLWidget::writeGSM(const QString &path)
         //assert(bonef);
         //writeSkeleton(bonef, skeleton, bindPose);
         //gsm_set_bones(gsmf, bonef);
+        writeSkeleton(skeleton, std::cout);
     }
     if (rmesh)
     {
@@ -336,7 +337,7 @@ void GLWidget::paintGL()
             }
             else if (editMode == ROTATION_MODE)
                 renderRotationSphere(selectedBone->joint->worldTransform);
-            else if (editMode = SCALE_MODE)
+            else if (editMode == SCALE_MODE)
                 renderScaleCircle(selectedBone->joint->worldTransform);
         }
     }
@@ -1121,7 +1122,6 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
         for (size_t j = 0; j < 4; j++)
             if (joints[4*i + j] == joint)
             {
-                glm::vec4 curcolor = glm::vec4(glm::vec3(color), color.a * weights[4*i+j]);
                 glColor4fv(glm::value_ptr(color));
                 const float BAD_THRESH = 0.05f;
                 if (weights[4*i+j] < BAD_THRESH)
