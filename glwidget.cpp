@@ -334,6 +334,11 @@ void GLWidget::paintGL()
                         axisPos);
                 renderAxes(axisMat);
             }
+            else if (editMode == ROTATION_MODE)
+            {
+                glm::mat4 axisMat = selectedBone->joint->worldTransform;
+                renderRotationSphere(axisMat);
+            }
         }
     }
 
@@ -631,21 +636,20 @@ void GLWidget::setTranslationVec(const glm::vec2 &clickPos)
 
 void GLWidget::setRotationVec(const glm::vec2 &clickPos)
 {
-    /*
     const float axisDistThresh = 5.f / glm::max(windowWidth, windowHeight);
     const float arcDistThresh = 0.003f;
-    glm::vec3 selJointNDC = boneNDC[selectedBone];
-    glm::vec3 clickNDC(clickPos, selJointNDC.z);
+    glm::vec3 centerNDC = circleNDC;
+    glm::vec3 clickNDC(clickPos, centerNDC.z);
     const float r = AXIS_LENGTH;
 
     // Check if they're outside of the rendered rotation sphere
-    float dist = glm::length(clickNDC - selJointNDC);
+    float dist = glm::length(clickNDC - centerNDC);
     if (dist > AXIS_LENGTH + axisDistThresh)
         return;
 
     // Now compute the location of their click on the sphere, radius small
     // Assume they've clicked on the sphere, so just map to front hemisphere
-    glm::vec3 sphereLoc = glm::vec3((clickPos - glm::vec2(selJointNDC)), 0.f);
+    glm::vec3 sphereLoc = glm::vec3((clickPos - glm::vec2(centerNDC)), 0.f);
     // Now fill out z coordinate to make length appropriate
     float mag = glm::min(r, glm::length(sphereLoc));
     sphereLoc.z = sqrtf(r*r - mag*mag);
@@ -686,7 +690,6 @@ void GLWidget::setRotationVec(const glm::vec2 &clickPos)
     dragStart = clickPos;
 
     std::cout << "Rotation drag.  axis: " << globalVec << "  vec: " << rotationVec << '\n';
-    */
 }
 
 void GLWidget::setScaleVec(const glm::vec2 &clickPos)
@@ -741,13 +744,10 @@ void GLWidget::setBoneTranslation(Bone* bone, const glm::vec2 &dragPos)
 
 void GLWidget::setBoneRotation(Bone* bone, const glm::vec2 &dragPos)
 {
-    /*
-    glm::vec3 ndcCoord(dragPos, boneNDC[bone].z);
-    if (dragPos == glm::vec2(HUGE_VAL))
-        return;
-    if (dragStart == dragPos)
-        return;
-    glm::vec2 center(boneNDC[bone]);
+    if (dragStart == dragPos) return;
+
+    glm::vec3 ndcCoord(dragPos, circleNDC.z);
+    glm::vec2 center(circleNDC);
 
     glm::vec2 starting = glm::normalize(dragStart - center);
     glm::vec2 current  = glm::normalize(dragPos - center);
@@ -758,14 +758,7 @@ void GLWidget::setBoneRotation(Bone* bone, const glm::vec2 &dragPos)
 
     glm::quat newrot = deltarot * startingRot;
 
-    const Joint *parentJoint = bone->joint;
-    JointPose newpose;
-    newpose.pos = parentJoint->pos;
-    newpose.scale = parentJoint->scale;
-    newpose.rot = quatToAxisAngle(newrot);
-
-    skeleton->setPose(parentJoint->index, &newpose);
-    */
+    skeleton->setBoneRotation(bone, quatToAxisAngle(newrot));
 }
 
 void GLWidget::setBoneScale(Bone* bone, const glm::vec2 &dragPos)
@@ -895,7 +888,7 @@ void GLWidget::renderAxes(const glm::mat4 &modelMat)
     glMatrixMode(GL_MODELVIEW);
 }
 
-void GLWidget::renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &worldCoord)
+void GLWidget::renderScaleCircle(const glm::mat4 &modelMat)
 {
     // Render in NDC coordinates, no projection matrix needed
     glMatrixMode(GL_PROJECTION);
@@ -904,7 +897,7 @@ void GLWidget::renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &wo
     glMatrixMode(GL_MODELVIEW);
 
     // ndc coord of axis center
-    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * transform, worldCoord);
+    glm::vec3 ndcCoord = applyMatrix(getProjectionMatrix() * getViewMatrix() * modelMat, glm::vec3(0.f));
 
     // render and record an enclosing circle
     glm::mat4 circleTransform = glm::scale(glm::translate(glm::mat4(1.f), ndcCoord), glm::vec3(SCALE_CIRCLE_RADIUS));
@@ -920,7 +913,7 @@ void GLWidget::renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &wo
 
 }
 
-void GLWidget::renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &worldCoord)
+void GLWidget::renderRotationSphere(const glm::mat4 &modelMat)
 {
     // Render in NDC coordinates, no projection matrix needed
     glMatrixMode(GL_PROJECTION);
@@ -928,19 +921,22 @@ void GLWidget::renderRotationSphere(const glm::mat4 &transform, const glm::vec3 
     glLoadIdentity();
     glMatrixMode(GL_MODELVIEW);
 
-    glm::mat4 fullMat = getProjectionMatrix() * transform;
+    glm::mat4 projMat = getProjectionMatrix();
+    glm::mat4 viewMat = getViewMatrix();
+    glm::mat4 fullMat = projMat * viewMat * modelMat;
 
-    glm::vec3 ndcCoord = applyMatrix(fullMat, worldCoord);
+    glm::vec3 ndcCoord = applyMatrix(fullMat, glm::vec3(0.f));
     glm::vec3 screenCoord = glm::vec3(ndcCoord.x, ndcCoord.y, 0.f);
+    circleNDC = ndcCoord;
 
     // Render a white enclosing circle
     glColor3f(1,1,1);
     renderArc(glm::vec3(CIRCLE_RADIUS, 0, 0)+screenCoord, screenCoord,
             glm::vec3(0,0,-1), 360.f);
 
-    glm::mat4 axisTrans = transform;
+    glm::mat4 axisTrans = viewMat;
     if (localMode)
-        axisTrans = axisTrans * selectedBone->joint->worldTransform;
+        axisTrans = axisTrans * modelMat;
     glm::vec3 xdir = glm::normalize(applyMatrix(axisTrans, glm::vec3(1,0,0), false));
     glm::vec3 ydir = glm::normalize(applyMatrix(axisTrans, glm::vec3(0,1,0), false));
     glm::vec3 zdir = glm::normalize(applyMatrix(axisTrans, glm::vec3(0,0,1), false));
@@ -964,7 +960,6 @@ void GLWidget::renderRotationSphere(const glm::mat4 &transform, const glm::vec3 
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
-
 
     // Record
     axisDir[0] = xdir;

@@ -230,6 +230,11 @@ void Skeleton::setBoneTailPos(Bone *b, const glm::vec3 &worldPos)
 
     updateTransforms();
 }
+void Skeleton::setBoneRotation(Bone *b, const glm::vec4 &rot)
+{
+    b->joint->rot = rot;
+    updateTransforms();
+}
 
 void Skeleton::setPose(const SkeletonPose *sp)
 {

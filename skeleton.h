@@ -72,6 +72,7 @@ public:
     void removeBone(Bone *bone); // removes all children too
     void setBoneHeadPos(Bone *b, const glm::vec3 &worldPos);
     void setBoneTailPos(Bone *b, const glm::vec3 &worldDelta);
+    void setBoneRotation(Bone *b, const glm::vec4 &rot);
 
     // Sets the current pose as the bind pose
     void setBindPose();

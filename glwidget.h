@@ -107,8 +107,8 @@ private:
     void renderEditGrid() const;
     void renderBone(const Bone *bone);
     void renderAxes(const glm::mat4 &modelTransform);
-    void renderRotationSphere(const glm::mat4 &transform, const glm::vec3 &center);
-    void renderScaleCircle(const glm::mat4 &transform, const glm::vec3 &center);
+    void renderRotationSphere(const glm::mat4 &modelTransform);
+    void renderScaleCircle(const glm::mat4 &modelTransform);
     void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
             size_t nverts, const glm::vec4 &color);
 
