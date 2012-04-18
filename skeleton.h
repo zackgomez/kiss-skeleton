@@ -91,6 +91,7 @@ private:
     void setWorldTransform(Joint* joint);
     void clearSkeleton();
     void removeBoneHelper(Bone *b);
+    void compactJoints();
 };
 
 void freeSkeletonPose(SkeletonPose *sp);

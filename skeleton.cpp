@@ -176,7 +176,7 @@ void Skeleton::removeBone(Bone *bone)
     // recursively remove children
     removeBoneHelper(bone);
 
-    // TODO compact joint list
+    compactJoints();
 }
 
 void Skeleton::removeBoneHelper(Bone *bone)
@@ -216,7 +216,6 @@ void Skeleton::setBoneHeadPos(Bone *b, const glm::vec3 &worldPos)
     {
         b->parent->tipPos = parentPos;
     }
-    // TODO what if that affects other children??
 
     updateTransforms();
 }
@@ -303,6 +302,37 @@ void Skeleton::setWorldTransform(Joint *joint)
     transform = glm::scale(transform, glm::vec3(joint->scale));
 
     joint->worldTransform = transform;
+}
+
+void Skeleton::compactJoints()
+{
+    size_t spaces_filled = 0;
+    // Find an empty spot
+    for (size_t i = 0; i < joints_.size(); )
+    {
+        if (joints_[i] == NULL)
+        {
+            // Found an empty spot @ i, now shift i+1 to the end left one position
+            // j iterates over target position
+            for (size_t j = i; j < joints_.size() - 1; j++)
+            {
+                joints_[j] = joints_[j + 1];
+                // update index/parent
+                if (!joints_[j]) continue;
+                joints_[j]->index = j;
+                // if the parent is being moved, decrement (moved by 1)
+                if (joints_[j]->parent > i)
+                    joints_[j]->parent--;
+            }
+            // The end is now garbage, get rid of it
+            joints_.pop_back();
+            spaces_filled++;
+        }
+        else
+            i++;
+    }
+    printf("Compacted %zu spaces.  Number of joints: %zu.\n", spaces_filled,
+            joints_.size());
 }
 
 void freeSkeletonPose(SkeletonPose *sp)
