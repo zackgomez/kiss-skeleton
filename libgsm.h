@@ -15,5 +15,6 @@ void *gsm_mesh_contents(gsm *file, size_t &len);
 
 // These return nonzero on failure
 int gsm_set_bones(gsm *file, FILE *f);
+int gsm_set_bones(gsm *file, int fd);
 int gsm_set_mesh(gsm *file, FILE *f);
 

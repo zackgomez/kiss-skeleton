@@ -80,6 +80,14 @@ int gsm_set_mesh(gsm *file, FILE *f)
     return zip_set_file(file->archive, MESH_FILE, f);
 }
 
+int gsm_set_bones(gsm *file, int fd)
+{
+    FILE *f = fdopen(fd, "rw");
+    if (!f)
+        return -1;
+    return gsm_set_bones(file, f);
+}
+
 void *zip_file_contents(struct zip *archive, const char *filename, size_t &len)
 {
     struct zip_stat stats;

@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cassert>
 #include <sstream>
+#include <fstream>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -227,15 +228,16 @@ void GLWidget::writeGSM(const QString &path)
 
     if (skeleton)
     {
-        // TODO
-        //std::cout << "writing skeleton\n";
-        //assert(bindPose);
-        //FILE *bonef = tmpfile();
-        //assert(bonef);
-        //writeSkeleton(bonef, skeleton, bindPose);
-        //gsm_set_bones(gsmf, bonef);
-        std::stringstream skeltext;
-        writeSkeleton(skeleton, skeltext);
+        // Get a temp file
+        char tmpname[] = "/tmp/geoeditXXXXXX";
+        int fd = mkstemp(tmpname); // keep fd for gsm_set_bones
+        std::cout << "writing skeleton to temp file " << tmpname << '\n';
+        // write skeleton to tmpfile
+        std::ofstream f(tmpname);
+        writeSkeleton(skeleton, f);
+        // write to gsm
+        gsm_set_bones(gsmf, fd);
+
     }
     if (rmesh)
     {
