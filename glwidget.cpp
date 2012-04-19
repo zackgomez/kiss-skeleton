@@ -2,6 +2,7 @@
 #include <QtGui>
 #include <iostream>
 #include <cassert>
+#include <sstream>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -233,7 +234,8 @@ void GLWidget::writeGSM(const QString &path)
         //assert(bonef);
         //writeSkeleton(bonef, skeleton, bindPose);
         //gsm_set_bones(gsmf, bonef);
-        writeSkeleton(skeleton, std::cout);
+        std::stringstream skeltext;
+        writeSkeleton(skeleton, skeltext);
     }
     if (rmesh)
     {

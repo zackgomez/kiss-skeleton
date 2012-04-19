@@ -105,7 +105,7 @@ Bone * Skeleton::newBoneHead(Bone *parent, const std::string &name)
     bone->name = name;
     bone->joint = parent->joint;
     bone->tipPos = glm::vec3(1, 1, 1); // TODO something better
-    bone->parent = parent;
+    bone->parent = parent->parent;
 
     bones_.push_back(bone);
 
@@ -166,7 +166,7 @@ void Skeleton::removeBone(Bone *bone)
     }
 
     // if we were the last child
-    if (bone->parent->children.empty())
+    if (bone->parent && bone->parent->children.empty())
     {
         // clean up our joint
         joints_[bone->joint->index] = 0;
@@ -181,7 +181,8 @@ void Skeleton::removeBone(Bone *bone)
 
 void Skeleton::removeBoneHelper(Bone *bone)
 {
-    // This bone is gone, so the "child" joint is gone too
+    // This bone is gone, so the "child" joint is gone too, all child bones
+    // share the same child joint, so only delete the first one
     if (!bone->children.empty())
     {
         // zero out joint in array
@@ -193,7 +194,7 @@ void Skeleton::removeBoneHelper(Bone *bone)
     for (size_t i = 0; i < bone->children.size(); i++)
         removeBoneHelper(bone->children[i]);
 
-    // remove from list
+    // remove from list, could be faster w/ swap trick
     bones_.erase(std::find(bones_.begin(), bones_.end(), bone));
 
     // and delete the bone
@@ -368,8 +369,8 @@ void writeSkeleton(const Skeleton *skeleton, std::ostream &os)
     for (size_t i = 0; i < joints.size(); i++)
     {
         const Joint *j = joints[i];
-        // index parent pos rot scale
-        os  << j->index << '\t' << j->parent << '\t' << j->pos << '\t'
+        // j index parent pos rot scale
+        os  << "j " << j->index << '\t' << j->parent << '\t' << j->pos << '\t'
             << j->rot << '\t' << j->scale << '\n';
     }
 
@@ -380,10 +381,8 @@ void writeSkeleton(const Skeleton *skeleton, std::ostream &os)
     for (size_t i = 0; i < bones.size(); i++)
     {
         const Bone *b = bones[i];
-        int parentIndex = b->parent ? findBoneIndex(bones, b->parent) : -1;
-        // index name jointidx tipPos parent
-        os  << i << '\t' << b->name << '\t' << b->joint->index << '\t'
-            << b->tipPos << '\t' << parentIndex << '\n';
+        // b name jointidx tipPos
+        os << "b " << b->name << ' ' << b->joint->index << ' ' << b->tipPos << '\n';
     }
 }
 
