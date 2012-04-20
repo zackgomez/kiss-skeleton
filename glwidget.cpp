@@ -8,6 +8,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "glwidget.h"
+#include "mainwindow.h"
 #include "Arcball.h"
 #include "skeleton.h"
 #include "libgsm.h"
@@ -49,9 +50,6 @@ GLWidget::GLWidget(QWidget *parent) :
     rotating(false), translating(false), zooming(false)
 {
     vertgraph = NULL;
-    skeleton = NULL;
-    bindPose = NULL;
-    copiedPose = NULL;
 
     selectedObject = OBJ_HEAD;
 
@@ -73,107 +71,7 @@ QSize GLWidget::sizeHint() const
     return QSize(800, 1000);
 }
 
-void GLWidget::newFile()
-{
-    closeFile();
-
-    // Create a blank skeleton, with only a root node
-    skeleton = new Skeleton();
-    updateGL();
-}
-
-void GLWidget::openFile(const QString &path)
-{
-    closeFile();
-
-    gsm *f = gsm_open(path.toAscii());
-    
-    if (!f)
-    {
-        // TODO display error dialog
-        return;
-    }
-
-    size_t len;
-    char *data = (char *) gsm_mesh_contents(f, len);
-    if (data)
-    {
-        bool skinned = true;
-        rmesh = readRawMesh(data, len, skinned);
-        verts = createSkinnedVertArray(rmesh, &nverts);
-        free(data);
-    }
-
-    data = (char *) gsm_bones_contents(f, len);
-    if (data)
-    {
-        assert(!skeleton);
-        skeleton = skeleton->readSkeleton(data, len);
-        if (!skeleton)
-            QMessageBox::information(this, tr("Error reading GSM File"),
-                    tr("Unable to parse bones file."));
-        if (skeleton)
-            bindPose = skeleton->currentPose();
-        free(data);
-    }
-
-    gsm_close(f);
-
-    meshMode = rmesh ?
-        (skeleton ? POSING_MODE : SKINNING_MODE) :
-        NO_MESH_MODE;
-    
-    currentFile = path;
-
-    updateGL();
-}
-
-void GLWidget::importModel()
-{
-    QString filename = QFileDialog::getOpenFileName(this, tr("Import Model"),
-            ".", tr("OBJ Files (*.obj)"));
-
-    if (filename.isEmpty()) return;
-
-    bool skinned = true;
-    rawmesh *newmesh = loadRawMesh(filename.toAscii(), skinned);
-    if (!newmesh)
-        QMessageBox::information(this, tr("Unable to import mesh"),
-                tr("Couldn't parse mesh file"));
-
-    freeRawMesh(rmesh);
-    free(verts);
-    rmesh = newmesh;
-    verts = createSkinnedVertArray(rmesh, &nverts);
-
-    meshMode = skeleton && skinned ? POSING_MODE : SKINNING_MODE;
-}
-
-void GLWidget::importBones()
-{
-    // TODO use a "set skeleton function"
-    QString filename = QFileDialog::getOpenFileName(this, tr("Import Bones"),
-            ".", tr("Skeleton Files (*.bones)"));
-
-    if (filename.isEmpty()) return;
-
-    Skeleton *newskel = Skeleton::readSkeleton(filename.toStdString());
-    
-    if (!newskel)
-    {
-        QMessageBox::information(this, tr("Unable to import skeleton"),
-                tr("Couldn't parse bones file"));
-        return;
-    }
-
-    delete skeleton;
-    skeleton = newskel;
-    delete bindPose;
-    bindPose = skeleton->currentPose();
-
-    meshMode = rmesh ? SKINNING_MODE : NO_MESH_MODE;
-}
-
+/*
 void GLWidget::autoSkinMesh()
 {
     if (!rmesh || !skeleton)
@@ -193,87 +91,7 @@ void GLWidget::autoSkinMesh()
 
     std::cout << "auto skinning complete\n";
 }
-
-void GLWidget::saveFile()
-{
-    std::cout << "saveFile()\n";
-    if (currentFile.isEmpty())
-        saveFileAs();
-    else
-        writeGSM(currentFile);
-}
-
-void GLWidget::saveFileAs()
-{
-    std::cout << "saveFileAs()\n";
-    QString path = QFileDialog::getSaveFileName(this, tr("Save GSM"),
-            currentFile, tr("GSM Files (*.gsm)"));
-
-    if (path.isEmpty()) return;
-
-    writeGSM(path);
-    currentFile = path;
-}
-
-void GLWidget::writeGSM(const QString &path)
-{
-    gsm *gsmf;
-    if (!(gsmf = gsm_open(path.toAscii())))
-    {
-        QMessageBox::information(this, tr("Unable to open gsm file"),
-                tr("TODO There should be an error message here..."));
-        return;
-    }
-
-    if (skeleton)
-    {
-        // Get a temp file
-        char tmpname[] = "/tmp/geoeditXXXXXX";
-        int fd = mkstemp(tmpname); // keep fd for gsm_set_bones
-        std::cout << "writing skeleton to temp file " << tmpname << '\n';
-        // write skeleton to tmpfile
-        std::ofstream f(tmpname);
-        writeSkeleton(skeleton, f);
-        // write to gsm
-        gsm_set_bones(gsmf, fd);
-
-    }
-    if (rmesh)
-    {
-        std::cout << "writing mesh\n";
-        FILE *meshf = tmpfile();
-        assert(meshf);
-        writeRawMesh(rmesh, meshf);
-        gsm_set_mesh(gsmf, meshf);
-    }
-
-    gsm_close(gsmf);
-}
-
-void GLWidget::closeFile()
-{
-    std::cout << "GLWidget::closeFile()\n";
-    delete skeleton;
-    skeleton = NULL;
-    freeSkeletonPose(bindPose);
-    bindPose = NULL;
-    selectedBone = NULL;
-    selectedObject = OBJ_NONE;
-
-    freeRawMesh(rmesh);
-    rmesh = NULL;
-    free(verts);
-    verts = NULL;
-    nverts = 0;
-
-    meshMode = NO_MESH_MODE;
-
-    currentFile.clear();
-
-    updateGL();
-
-    // TODO clear timeline/keyframes
-}
+*/
 
 void GLWidget::initializeGL()
 {
@@ -363,7 +181,7 @@ void GLWidget::paintGL()
     {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         if (shaderProgram)
-            renderSkinnedMesh(viewMatrix, verts, nverts,
+            renderSkinnedMesh(glm::mat4(1.f), verts, nverts,
                     glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
@@ -383,19 +201,7 @@ void GLWidget::resizeGL(int width, int height)
 
 void GLWidget::keyPressEvent(QKeyEvent *e)
 {
-    if (e->key() == Qt::Key_Tab && meshMode != NO_MESH_MODE)
-    {
-        if (meshMode == POSING_MODE)
-        {
-            meshMode = SKINNING_MODE;
-            skeleton->setPose(bindPose);
-        }
-        else if (meshMode == SKINNING_MODE)
-        {
-            meshMode = POSING_MODE;
-        }
-    }
-    else if (e->key() == Qt::Key_R)
+    if (e->key() == Qt::Key_R)
         editMode = ROTATION_MODE;
     else if (e->key() == Qt::Key_T)
         editMode = TRANSLATION_MODE;
@@ -957,7 +763,7 @@ void GLWidget::renderRotationSphere(const glm::mat4 &modelMat)
     axisDir[2] = zdir;
 }
 
-void GLWidget::renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+void GLWidget::renderSkinnedMesh(const glm::mat4 &modelMatrix, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color)
 {
     const std::vector<Joint*> joints = skeleton->getJoints();
@@ -973,8 +779,6 @@ void GLWidget::renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8
         //glm::vec3 trans = applyMatrix(jointMats[i], glm::vec3(0.f));
         //std::cout << "(" << i << ") quat: " << qrot << " trans: " << trans << '\n';
     }
-    // XXX this should be a param
-    glm::mat4 modelMatrix = glm::mat4(1.f);
 
     // uniforms
     GLuint projectionUniform  = glGetUniformLocation(shaderProgram->program, "projectionMatrix");

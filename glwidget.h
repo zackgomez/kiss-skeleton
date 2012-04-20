@@ -6,19 +6,19 @@
 #include <QLineEdit>
 #include <QGridLayout>
 #include <QPushButton>
+#include <QLabel>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <map>
 #include "Arcball.h"
 #include "zgfx.h"
-#include "glsubdisplay.h"
 
 class Arcball;
 class Skeleton;
-struct SkeletonPose;
 class Joint;
 struct graph;
 struct Bone;
+class SkeletonPose;
 
 class GLWidget : public QGLWidget
 {
@@ -29,17 +29,6 @@ public:
 
     QSize minimumSizeHint() const;
     QSize sizeHint() const;
-
-public slots:
-    void newFile();
-// TODO no arg
-    void openFile(const QString &path);
-    void importModel();
-    void importBones();
-    void saveFile();
-    void saveFileAs();
-    void closeFile();
-    void autoSkinMesh();
 
 protected:
     void initializeGL();
@@ -57,19 +46,17 @@ protected:
 private:
     // Data members
     Arcball *arcball;
-    Skeleton *skeleton;
     shader *shaderProgram;
     rawmesh *rmesh;
     vert_p4t2n3j8 *verts;
     size_t nverts;
     graph *vertgraph;
 
+    Skeleton *skeleton;
+
     bool renderSelected;
 
-    QString currentFile;
-
     int windowWidth, windowHeight;
-    SkeletonPose *bindPose, *copiedPose;
     Bone* selectedBone;
     int selectedObject; // head, bone, tip
 
@@ -99,9 +86,9 @@ private:
     void setBoneTranslation(Bone* joint, const glm::vec2 &dragPos);
     void setBoneRotation(Bone* joint, const glm::vec2 &dragPos);
     void setBoneScale(Bone* joint, const glm::vec2 &dragPos);
-    // Timeline functions
-    void setPoseFromFrame(int frame);
-    void setFrame(int frame);
+    void setJointPosition(const Joint* joint, const glm::vec2 &dragPos);
+    void setJointRotation(const Joint* joint, const glm::vec2 &dragPos);
+    void setJointScale(const Joint* joint, const glm::vec2 &dragPos);
 
     // Rendering helpers
     void renderEditGrid() const;
@@ -109,7 +96,7 @@ private:
     void renderAxes(const glm::mat4 &modelTransform);
     void renderRotationSphere(const glm::mat4 &modelTransform);
     void renderScaleCircle(const glm::mat4 &modelTransform);
-    void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+    void renderSkinnedMesh(const glm::mat4 &modelMatrix, const vert_p4t2n3j8 *verts,
             size_t nverts, const glm::vec4 &color);
 
     glm::mat4 getProjectionMatrix() const;
