@@ -107,18 +107,13 @@ void GLWidget::openFile(const QString &path)
     data = (char *) gsm_bones_contents(f, len);
     if (data)
     {
-        skeleton = new Skeleton();
-        if (skeleton->readSkeleton(data, len))
-        {
-            free(skeleton);
-            skeleton = NULL;
+        assert(!skeleton);
+        skeleton = skeleton->readSkeleton(data, len);
+        if (!skeleton)
             QMessageBox::information(this, tr("Error reading GSM File"),
                     tr("Unable to parse bones file."));
-        }
         if (skeleton)
-        {
             bindPose = skeleton->currentPose();
-        }
         free(data);
     }
 
@@ -162,13 +157,12 @@ void GLWidget::importBones()
 
     if (filename.isEmpty()) return;
 
-    Skeleton *newskel = new Skeleton();
+    Skeleton *newskel = Skeleton::readSkeleton(filename.toStdString());
     
-    if (newskel->readSkeleton(filename.toStdString()))
+    if (!newskel)
     {
         QMessageBox::information(this, tr("Unable to import skeleton"),
                 tr("Couldn't parse bones file"));
-        delete newskel;
         return;
     }
 
@@ -203,8 +197,10 @@ void GLWidget::autoSkinMesh()
 void GLWidget::saveFile()
 {
     std::cout << "saveFile()\n";
-    if (currentFile.isEmpty()) return;
-    writeGSM(currentFile);
+    if (currentFile.isEmpty())
+        saveFileAs();
+    else
+        writeGSM(currentFile);
 }
 
 void GLWidget::saveFileAs()
@@ -212,8 +208,11 @@ void GLWidget::saveFileAs()
     std::cout << "saveFileAs()\n";
     QString path = QFileDialog::getSaveFileName(this, tr("Save GSM"),
             currentFile, tr("GSM Files (*.gsm)"));
-    if (!path.isEmpty())
-        writeGSM(path);
+
+    if (path.isEmpty()) return;
+
+    writeGSM(path);
+    currentFile = path;
 }
 
 void GLWidget::writeGSM(const QString &path)

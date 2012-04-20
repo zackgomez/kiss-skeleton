@@ -49,6 +49,8 @@ public:
     static Skeleton * readSkeleton(const std::string &filename);
     // Returns null on error
     static Skeleton * readSkeleton(const char *text, size_t len);
+    // Returns null on error
+    static Skeleton * readSkeleton(std::istream &is);
 
     // Creates a skeleton with only a root node
     Skeleton();

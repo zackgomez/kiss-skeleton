@@ -40,14 +40,96 @@ Skeleton::~Skeleton()
 
 Skeleton * Skeleton::readSkeleton(const std::string &filename)
 {
-    // TODO
-    return 0;
+    std::ifstream f(filename.c_str());
+    if (!f) return 0;
+    return readSkeleton(f);
 }
 
 Skeleton * Skeleton::readSkeleton(const char *text, size_t len)
 {
-    // TODO
-    return 0;
+    std::stringstream ss(std::string(text, len));
+    return readSkeleton(ss);
+}
+
+Skeleton *Skeleton::readSkeleton(std::istream &is)
+{
+    // start from scratch
+    Skeleton *ret = new Skeleton();
+    ret->clearSkeleton();
+
+    std::string line;
+    while (std::getline(is, line))
+    {
+        if (line.empty()) continue;
+        std::string cmd;
+        std::stringstream ss(line);
+
+        ss >> cmd;
+        if (cmd == "j")
+        {
+            Joint *j = new Joint;
+            // j index parent pos rot scale
+            ss >> j->index >> j->parent >> j->pos.x >> j->pos.y >> j->pos.z
+                >> j->rot.x >> j->rot.y >> j->rot.z >> j->rot[3] >> j->scale;
+            if (!ss)
+            {
+                // Print a message and try to continue
+                printf("Unable to parse joint command '%s'\n", line.c_str());
+                continue;
+            }
+            // Assumes the joints are in order
+            assert(j->index == ret->joints_.size());
+            assert(j->parent < ret->joints_.size() || j->parent == ROOT_PARENT);
+
+            // Done, just add it
+            ret->joints_.push_back(j);
+        }
+        else if (cmd == "b")
+        {
+            // b name jointidx tipPos
+            Bone *b = new Bone;
+            int jointIdx;
+            ss >> b->name >> jointIdx >> b->tipPos.x >> b->tipPos.y >> b->tipPos.z;
+            assert(jointIdx < ret->joints_.size() && jointIdx >= 0);
+            b->joint = ret->joints_[jointIdx];
+
+            // now deal with the parent
+            b->parent = NULL;
+            if (b->joint->parent != ROOT_PARENT)
+            {
+                // Find the bone with the same tipPos as our joint
+                for (size_t i = 0; i < ret->bones_.size(); i++)
+                {
+                    Bone *cur = ret->bones_[i];
+                    // Bone is parent if it's joint is our joints parent and
+                    // it's tip is at our joint (they are same space then)
+                    if (cur->joint->index == b->joint->parent
+                        && cur->tipPos == b->joint->pos)
+                    {
+                        // connect up
+                        b->parent = cur;
+                        cur->children.push_back(b);
+                        break;
+                    }
+                }
+                assert(b->parent);
+            }
+
+            // Done, add it
+            ret->bones_.push_back(b);
+        }
+        else
+        {
+            printf("Unable to parse line '%s' for skeleton\n",
+                    line.c_str());
+        }
+
+    }
+
+    printf("Read %zu joints for %zu bones.\n", ret->joints_.size(), ret->bones_.size());
+
+    ret->updateTransforms();
+    return ret;
 }
 
 void Skeleton::clearSkeleton()
