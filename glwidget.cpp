@@ -49,17 +49,16 @@ GLWidget::GLWidget(QWidget *parent) :
     dragging(false),
     rotating(false), translating(false), zooming(false)
 {
-    skeleton = NULL;
-    bindPose = NULL;
-    copiedPose = NULL;
+    masterWindow = (MainWindow) parent;
+    skeleton = masterwindow->skeleton;
+    bindPose = masterWindow->bindPose;
 
     rmesh = NULL;
     verts = NULL;
 
     // timeline vars
-    tdata_ = new timeline_data();
-    tdata_->currentFrame = 1;
-    tdisplay_ = new TimelineDisplay(this, tdata_);
+    tdata_ = masterWindow->tdata_;
+    tdata_->currentFrame = masterWindow->currentFrame;
 }
 
 GLWidget::~GLWidget()
@@ -79,18 +78,18 @@ QSize GLWidget::sizeHint() const
 
 void GLWidget::autoSkinMesh()
 {
-    if (!rmesh || !skeleton)
+    if (!rmesh || !masterWindow->skeleton)
         return;
 
     // TODO display a QProgressDialog here
-    autoSkinMeshBest(rmesh, skeleton);
+    autoSkinMeshBest(rmesh, masterWindow->skeleton);
     // regenerate verts
     free(verts);
     verts = createSkinnedVertArray(rmesh, &nverts);
 
-    skeleton->setBindPose();
-    freeSkeletonPose(bindPose);
-    bindPose = skeleton->currentPose();
+    masterWindow->skeleton->setBindPose();
+    freeSkeletonPose(masterWindow->bindPose);
+    masterWindow->bindPose = masterWindow->skeleton->currentPose();
 
     std::cout << "auto skinning complete\n";
 }
@@ -142,7 +141,7 @@ void GLWidget::paintGL()
     // Render the joints
     if (skeletonMode != NO_SKELETON_MODE)
     {
-        const std::vector<Joint*> joints = skeleton->getJoints();
+        const std::vector<Joint*> joints = masterWindow->skeleton->getJoints();
         for (size_t i = 0; i < joints.size(); i++)
             renderJoint(viewMatrix, joints[i], joints);
     }
@@ -194,7 +193,7 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
         if (meshMode == POSING_MODE)
         {
             meshMode = SKINNING_MODE;
-            skeleton->setPose(bindPose);
+            masterWindow->skeleton->setPose(masterWindow->bindPose);
         }
         else if (meshMode == SKINNING_MODE)
         {
@@ -284,7 +283,7 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
                 float dist = glm::length(screenCoord - glm::vec2(ndc));
                 if (dist < SELECT_THRESH && ndc.z < nearest)
                 {
-                    selectedJoint = skeleton->getJoint(i);
+                    selectedJoint = masterWindow->skeleton->getJoint(i);
                     nearest = ndc.z;
                 }
             }
@@ -403,7 +402,7 @@ void GLWidget::setTranslationVec(const glm::vec2 &clickPos)
     if (localMode)
         translationVec = applyMatrix(selectedJoint->worldTransform, translationVec, false);
     glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ?
-        glm::mat4(1.f) : skeleton->getJoint(selectedJoint->parent)->worldTransform;
+        glm::mat4(1.f) : masterWindow->skeleton->getJoint(selectedJoint->parent)->worldTransform;
     translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
 
     // If we got here, then it's a valid drag and translationVec is already set
@@ -456,7 +455,7 @@ void GLWidget::setRotationVec(const glm::vec2 &clickPos)
 
     // Transform the rotation vector into parent space so that the transformation
     // is around the global axes
-    glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(selectedJoint->parent)->worldTransform;
+    glm::mat4 parentTransform = selectedJoint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : masterWindow->skeleton->getJoint(selectedJoint->parent)->worldTransform;
     rotationVec = globalVec;
     if (localMode)
         rotationVec = applyMatrix(selectedJoint->worldTransform, rotationVec, false);
@@ -493,7 +492,7 @@ void GLWidget::setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
 {
     if (dragPos == glm::vec2(HUGE_VAL))
         return;
-    glm::mat4 parentWorld = joint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(joint->parent)->worldTransform;
+    glm::mat4 parentWorld = joint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : masterWindow->skeleton->getJoint(joint->parent)->worldTransform;
 
     // Get the positions of the two mouse positions in parent joint space
     glm::vec3 startParentPos = applyMatrix(glm::inverse(getProjectionMatrix() * getViewMatrix() * parentWorld),
@@ -516,7 +515,7 @@ void GLWidget::setJointPosition(const Joint* joint, const glm::vec2 &dragPos)
     pose.rot = joint->rot;
     pose.scale = joint->scale;
     pose.pos = startingPos + deltaPos;
-    skeleton->setPose(selectedJoint->index, &pose);
+    masterWindow->skeleton->setPose(selectedJoint->index, &pose);
 }
 
 void GLWidget::setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
@@ -542,7 +541,7 @@ void GLWidget::setJointRotation(const Joint* joint, const glm::vec2 &dragPos)
     newpose.scale = joint->scale;
     newpose.rot = quatToAxisAngle(newrot);
 
-    skeleton->setPose(selectedJoint->index, &newpose);
+    masterWindow->skeleton->setPose(selectedJoint->index, &newpose);
 }
 
 void GLWidget::setJointScale(const Joint* joint, const glm::vec2 &dragPos)
@@ -553,7 +552,7 @@ void GLWidget::setJointScale(const Joint* joint, const glm::vec2 &dragPos)
     pose.rot = joint->rot;
     pose.pos = joint->pos;
     pose.scale = newScale;
-    skeleton->setPose(selectedJoint->index, &pose);
+    masterWindow->skeleton->setPose(selectedJoint->index, &pose);
 }
 
 
@@ -785,7 +784,7 @@ void GLWidget::renderRotationSphere(const glm::mat4 &transform, const glm::vec3 
 void GLWidget::renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color)
 {
-    const std::vector<Joint*> joints = skeleton->getJoints();
+    const std::vector<Joint*> joints = masterWindow->skeleton->getJoints();
     // First get a list of the necessary transformations
     std::vector<glm::mat4> jointMats(joints.size());
     for (size_t i = 0; i < joints.size(); i++)

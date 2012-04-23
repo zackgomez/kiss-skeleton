@@ -45,6 +45,7 @@ private slots:
     void update();
 
 private:
+    MainWindow *masterWindow;
     // Data members
     Arcball *arcball;
     shader *shaderProgram;

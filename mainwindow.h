@@ -20,6 +20,9 @@ public:
     // timeline ui vars
     QTimer *animTimer;
     bool play;
+    // animation vars
+    TimelineData tdata_;
+
 
 public slots:
     void newFile();
@@ -116,3 +119,16 @@ private:
     };
 };
 
+struct timeline_data
+{
+    int currentFrame;
+    std::vector<animation*> animations;
+    animation* currentAnimation;
+};
+
+struct animation
+{
+    std::string name;
+    std::map<int, SkeletonPose*> keyframes;
+    int endFrame;
+};
