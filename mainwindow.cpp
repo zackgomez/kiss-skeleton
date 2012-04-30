@@ -170,8 +170,10 @@ void MainWindow::importModel()
         QMessageBox::information(this, tr("Unable to import mesh"),
                 tr("Couldn't parse mesh file"));
 
-    // TODO assign
-    freeRawMesh(newmesh);
+    freeRawMesh(cdata->rmesh);
+    cdata->rmesh = newmesh;
+
+    glwidget->dirtyCData();
 }
 
 void MainWindow::importBones()
@@ -193,6 +195,8 @@ void MainWindow::importBones()
     // Clean up old skeleton
     delete cdata->skeleton;
     cdata->skeleton = newskel;
+
+    glwidget->dirtyCData();
 }
 
 void MainWindow::writeGSM(const QString &path)

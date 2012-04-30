@@ -45,13 +45,11 @@ GLWidget::GLWidget(QWidget *parent, CharacterData *cdata) :
     dragging(false),
     rotating(false), translating(false), zooming(false)
 {
+    verts = NULL;
     vertgraph = NULL;
     bindPose = NULL;
-    copiedPose = NULL;
 
     selectedObject = OBJ_HEAD;
-
-    verts = NULL;
 }
 
 GLWidget::~GLWidget()
@@ -66,6 +64,40 @@ QSize GLWidget::minimumSizeHint() const
 QSize GLWidget::sizeHint() const
 {
     return QSize(800, 1000);
+}
+
+void GLWidget::dirtyCData()
+{
+    dragging = false;
+    rotating = translating = zooming = false;
+    localMode = false;
+
+    if (vertgraph)
+    {
+        free_graph (vertgraph);
+        vertgraph = NULL;
+    }
+    if (verts)
+    {
+        free(verts);
+        verts = NULL;
+        nverts = 0;
+    }
+
+    if (cdata_->rmesh)
+    {
+        verts = createSkinnedVertArray(cdata_->rmesh, &nverts);
+        meshMode = SKINNING_MODE;
+    }
+    /*
+    if (cdata_->skeleton)
+    {
+        if (cdata_->rmesh)
+            meshMode = POSING_MODE;
+
+        // TODO perhaps deal with some poses (bind pose)
+    }
+    */
 }
 
 void GLWidget::autoSkinMesh()
@@ -162,12 +194,11 @@ void GLWidget::paintGL()
     {
         glDisable(GL_DEPTH_TEST);
         glColor4fv(glm::value_ptr(glm::vec4(ACTIVE_COLOR, 0.5f)));
-        renderMesh(viewMatrix, verts, nverts);
+        renderMesh(projMatrix * viewMatrix, verts, nverts);
 
         glColor3f(1.f, 1.f, 1.f);
         glLineWidth(1);
         renderPoints(viewMatrix, cdata_->rmesh->verts, cdata_->rmesh->nverts);
-
 
         glEnable(GL_DEPTH_TEST);
     }

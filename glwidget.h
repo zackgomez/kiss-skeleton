@@ -36,6 +36,9 @@ public:
     QSize minimumSizeHint() const;
     QSize sizeHint() const;
 
+    // updates cached data related to CharacterData struct
+    void dirtyCData();
+
 public slots:
     void autoSkinMesh();
 
@@ -63,7 +66,7 @@ private:
     QString currentFile;
 
     int windowWidth, windowHeight;
-    SkeletonPose *bindPose, *copiedPose;
+    SkeletonPose *bindPose;
     Bone* selectedBone;
     int selectedObject; // head, bone, tip
 
