@@ -9,7 +9,8 @@ HEADERS       = glwidget.h \
                 mainwindow.h \
                 libgsm.h \
                 meshops.h \
-                glsubdisplay.h
+                glsubdisplay.h \
+                timeline.h
 SOURCES       = glwidget.cpp \
                 qtmain.cpp \
                 arcball.cpp \
@@ -18,7 +19,8 @@ SOURCES       = glwidget.cpp \
                 mainwindow.cpp \
                 libgsm.cpp \
                 meshops.cpp \
-                glsubdisplay.cpp
+                glsubdisplay.cpp \
+                timeline.cpp
 QT           += opengl
 LIBS         += -lGLEW -lzip
 

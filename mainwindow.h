@@ -10,11 +10,14 @@ class MainWindow : public QMainWindow
 public:
     MainWindow();
 
-protected:
-    void contextMenuEvent(QContextMenuEvent *event);
-
 private slots:
-    void open();
+    void openFile();
+    void newFile();
+    void importModel();
+    void importBones();
+    void saveFile();
+    void saveFileAs();
+    void closeFile();
 
 private:
     QMenu *fileMenu;
@@ -34,15 +37,16 @@ private:
 
     QAction *autoSkinAct;
 
-    QAction *newAnimation;
-    QAction *setKeyframe;
-    QAction *delKeyframe;
-    QAction *copyPose;
-    QAction *pastePose;
+    QAction *newAnimationAct;
+    QAction *setKeyframeAct;
+    QAction *delKeyframeAct;
+    QAction *copyPoseAct;
+    QAction *pastePoseAct;
 
     GLWidget *glwidget;
 
     void createActions();
     void createMenus();
+    void writeGSM(const QString &path);
 };
 

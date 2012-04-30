@@ -20,9 +20,6 @@ const float GLWidget::AXIS_LENGTH = 0.10f; // ndc
 const float GLWidget::CIRCLE_RADIUS= 0.12f; //ndc
 const float GLWidget::SCALE_CIRCLE_RADIUS = 0.15f; //ndc
 const float GLWidget::SELECT_THRESH = 0.01f;
-const int GLWidget::NO_MESH_MODE = 0;
-const int GLWidget::SKINNING_MODE = 1;
-const int GLWidget::POSING_MODE = 2;
 
 static void renderCube();
 static void renderCircle(const glm::mat4 &transform);
@@ -37,6 +34,7 @@ static void renderWeightedPoints(const glm::mat4 &transform, const rawmesh *mesh
         const graph *g, size_t ji, const glm::vec4 &color);
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts);
+static void renderEditGrid(const glm::mat4 &transform);
 
 GLWidget::GLWidget(QWidget *parent) :
     QGLWidget(parent),
@@ -73,107 +71,6 @@ QSize GLWidget::sizeHint() const
     return QSize(800, 1000);
 }
 
-void GLWidget::newFile()
-{
-    closeFile();
-
-    // Create a blank skeleton, with only a root node
-    skeleton = new Skeleton();
-    updateGL();
-}
-
-void GLWidget::openFile(const QString &path)
-{
-    closeFile();
-
-    gsm *f = gsm_open(path.toAscii());
-    
-    if (!f)
-    {
-        // TODO display error dialog
-        return;
-    }
-
-    size_t len;
-    char *data = (char *) gsm_mesh_contents(f, len);
-    if (data)
-    {
-        bool skinned = true;
-        rmesh = readRawMesh(data, len, skinned);
-        verts = createSkinnedVertArray(rmesh, &nverts);
-        free(data);
-    }
-
-    data = (char *) gsm_bones_contents(f, len);
-    if (data)
-    {
-        assert(!skeleton);
-        skeleton = skeleton->readSkeleton(data, len);
-        if (!skeleton)
-            QMessageBox::information(this, tr("Error reading GSM File"),
-                    tr("Unable to parse bones file."));
-        if (skeleton)
-            bindPose = skeleton->currentPose();
-        free(data);
-    }
-
-    gsm_close(f);
-
-    meshMode = rmesh ?
-        (skeleton ? POSING_MODE : SKINNING_MODE) :
-        NO_MESH_MODE;
-    
-    currentFile = path;
-
-    updateGL();
-}
-
-void GLWidget::importModel()
-{
-    QString filename = QFileDialog::getOpenFileName(this, tr("Import Model"),
-            ".", tr("OBJ Files (*.obj)"));
-
-    if (filename.isEmpty()) return;
-
-    bool skinned = true;
-    rawmesh *newmesh = loadRawMesh(filename.toAscii(), skinned);
-    if (!newmesh)
-        QMessageBox::information(this, tr("Unable to import mesh"),
-                tr("Couldn't parse mesh file"));
-
-    freeRawMesh(rmesh);
-    free(verts);
-    rmesh = newmesh;
-    verts = createSkinnedVertArray(rmesh, &nverts);
-
-    meshMode = skeleton && skinned ? POSING_MODE : SKINNING_MODE;
-}
-
-void GLWidget::importBones()
-{
-    // TODO use a "set skeleton function"
-    QString filename = QFileDialog::getOpenFileName(this, tr("Import Bones"),
-            ".", tr("Skeleton Files (*.bones)"));
-
-    if (filename.isEmpty()) return;
-
-    Skeleton *newskel = Skeleton::readSkeleton(filename.toStdString());
-    
-    if (!newskel)
-    {
-        QMessageBox::information(this, tr("Unable to import skeleton"),
-                tr("Couldn't parse bones file"));
-        return;
-    }
-
-    delete skeleton;
-    skeleton = newskel;
-    delete bindPose;
-    bindPose = skeleton->currentPose();
-
-    meshMode = rmesh ? SKINNING_MODE : NO_MESH_MODE;
-}
-
 void GLWidget::autoSkinMesh()
 {
     if (!rmesh || !skeleton)
@@ -192,87 +89,6 @@ void GLWidget::autoSkinMesh()
     vertgraph = newgraph;
 
     std::cout << "auto skinning complete\n";
-}
-
-void GLWidget::saveFile()
-{
-    std::cout << "saveFile()\n";
-    if (currentFile.isEmpty())
-        saveFileAs();
-    else
-        writeGSM(currentFile);
-}
-
-void GLWidget::saveFileAs()
-{
-    std::cout << "saveFileAs()\n";
-    QString path = QFileDialog::getSaveFileName(this, tr("Save GSM"),
-            currentFile, tr("GSM Files (*.gsm)"));
-
-    if (path.isEmpty()) return;
-
-    writeGSM(path);
-    currentFile = path;
-}
-
-void GLWidget::writeGSM(const QString &path)
-{
-    gsm *gsmf;
-    if (!(gsmf = gsm_open(path.toAscii())))
-    {
-        QMessageBox::information(this, tr("Unable to open gsm file"),
-                tr("TODO There should be an error message here..."));
-        return;
-    }
-
-    if (skeleton)
-    {
-        // Get a temp file
-        char tmpname[] = "/tmp/geoeditXXXXXX";
-        int fd = mkstemp(tmpname); // keep fd for gsm_set_bones
-        std::cout << "writing skeleton to temp file " << tmpname << '\n';
-        // write skeleton to tmpfile
-        std::ofstream f(tmpname);
-        writeSkeleton(skeleton, f);
-        // write to gsm
-        gsm_set_bones(gsmf, fd);
-
-    }
-    if (rmesh)
-    {
-        std::cout << "writing mesh\n";
-        FILE *meshf = tmpfile();
-        assert(meshf);
-        writeRawMesh(rmesh, meshf);
-        gsm_set_mesh(gsmf, meshf);
-    }
-
-    gsm_close(gsmf);
-}
-
-void GLWidget::closeFile()
-{
-    std::cout << "GLWidget::closeFile()\n";
-    delete skeleton;
-    skeleton = NULL;
-    freeSkeletonPose(bindPose);
-    bindPose = NULL;
-    selectedBone = NULL;
-    selectedObject = OBJ_NONE;
-
-    freeRawMesh(rmesh);
-    rmesh = NULL;
-    free(verts);
-    verts = NULL;
-    nverts = 0;
-
-    meshMode = NO_MESH_MODE;
-
-    currentFile.clear();
-
-    updateGL();
-
-    // TODO clear timeline/keyframes
 }
 
 void GLWidget::initializeGL()
@@ -305,18 +121,17 @@ void GLWidget::paintGL()
     // render main view
     glViewport(0, 0, windowWidth, windowHeight);
     arcball->setAspect((float) windowWidth / windowHeight);
-    glMatrixMode(GL_PROJECTION);
     glm::mat4 projMatrix = arcball->getProjectionMatrix();
-    glLoadMatrixf(glm::value_ptr(projMatrix));
-    glMatrixMode(GL_MODELVIEW);
     glm::mat4 viewMatrix = arcball->getViewMatrix();
-    glLoadMatrixf(glm::value_ptr(viewMatrix));
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
 
     glEnable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
 
     // render grid
-    renderEditGrid();
+    renderEditGrid(projMatrix * viewMatrix);
 
     // Render the joints
     if (skeleton)
@@ -363,7 +178,7 @@ void GLWidget::paintGL()
     {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         if (shaderProgram)
-            renderSkinnedMesh(viewMatrix, verts, nverts,
+            renderSkinnedMesh(glm::mat4(1.f), verts, nverts,
                     glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
@@ -766,27 +581,6 @@ void GLWidget::setBoneScale(Bone* bone, const glm::vec2 &dragPos)
     skeleton->setBoneScale(bone, newScale);
 }
 
-void GLWidget::renderEditGrid() const
-{
-    glLoadMatrixf(glm::value_ptr(getViewMatrix()));
-    const int width = 16;
-
-    glBegin(GL_LINES);
-    for (int i = -width/2; i <= width/2; i++)
-    {
-        glColor3f(0.2f, 0.2f, 0.2f);
-        // in zdirection
-        if (i == 0) glColor3f(0.4f, 0.f, 0.f);
-        glVertex3f(i, 0.f, -width/2);
-        glVertex3f(i, 0.f, width/2);
-        if (i == 0) glColor3f(0.f, 0.4f, 0.f);
-        // in xdirection
-        glVertex3f(-width/2, 0.f, i);
-        glVertex3f(width/2, 0.f, i);
-    }
-    glEnd();
-}
-
 void GLWidget::renderBone(const Bone *bone)
 {
     const Joint *joint = bone->joint;
@@ -957,7 +751,7 @@ void GLWidget::renderRotationSphere(const glm::mat4 &modelMat)
     axisDir[2] = zdir;
 }
 
-void GLWidget::renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+void GLWidget::renderSkinnedMesh(const glm::mat4 &modelMatrix, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color)
 {
     const std::vector<Joint*> joints = skeleton->getJoints();
@@ -973,8 +767,6 @@ void GLWidget::renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8
         //glm::vec3 trans = applyMatrix(jointMats[i], glm::vec3(0.f));
         //std::cout << "(" << i << ") quat: " << qrot << " trans: " << trans << '\n';
     }
-    // XXX this should be a param
-    glm::mat4 modelMatrix = glm::mat4(1.f);
 
     // uniforms
     GLuint projectionUniform  = glGetUniformLocation(shaderProgram->program, "projectionMatrix");
@@ -1174,6 +966,27 @@ void renderLine(const glm::mat4 &transform, const glm::vec3 &p0, const glm::vec3
     glBegin(GL_LINES);
     glVertex3fv(glm::value_ptr(p0));
     glVertex3fv(glm::value_ptr(p1));
+    glEnd();
+}
+
+void renderEditGrid(const glm::mat4 &transform)
+{
+    glLoadMatrixf(glm::value_ptr(transform));
+    const int width = 16;
+
+    glBegin(GL_LINES);
+    for (int i = -width/2; i <= width/2; i++)
+    {
+        glColor3f(0.2f, 0.2f, 0.2f);
+        // in zdirection
+        if (i == 0) glColor3f(0.4f, 0.f, 0.f);
+        glVertex3f(i, 0.f, -width/2);
+        glVertex3f(i, 0.f, width/2);
+        if (i == 0) glColor3f(0.f, 0.4f, 0.f);
+        // in xdirection
+        glVertex3f(-width/2, 0.f, i);
+        glVertex3f(width/2, 0.f, i);
+    }
     glEnd();
 }
 

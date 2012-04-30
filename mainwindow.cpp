@@ -1,9 +1,12 @@
 #include <QMenuBar>
 #include <QAction>
 #include <QFileDialog>
+#include <QMessageBox>
 #include <iostream>
 #include "mainwindow.h"
 #include "glwidget.h"
+#include "skeleton.h"
+#include "libgsm.h"
 
 MainWindow::MainWindow()
 {
@@ -24,32 +27,32 @@ void MainWindow::createActions()
     newAct = new QAction(tr("&New"), this);
     newAct->setShortcuts(QKeySequence::New);
     newAct->setStatusTip(tr("Start a new model"));
-    connect(newAct, SIGNAL(triggered()), glwidget, SLOT(newFile()));
+    connect(newAct, SIGNAL(triggered()), this, SLOT(newFile()));
 
     openAct = new QAction(tr("&Open..."), this);
     openAct->setShortcuts(QKeySequence::Open);
     openAct->setStatusTip(tr("Open an existing file"));
-    connect(openAct, SIGNAL(triggered()), this, SLOT(open()));
+    connect(openAct, SIGNAL(triggered()), this, SLOT(openFile()));
 
     saveAct = new QAction(tr("&Save"), this);
     saveAct->setShortcuts(QKeySequence::Save);
     saveAct->setStatusTip(tr("Save the current file"));
-    connect(saveAct, SIGNAL(triggered()), glwidget, SLOT(saveFile()));
+    connect(saveAct, SIGNAL(triggered()), this, SLOT(saveFile()));
 
     saveAsAct = new QAction(tr("Save &As..."), this);
     saveAsAct->setShortcut(QKeySequence(tr("Ctrl+Shift+S")));
     saveAsAct->setStatusTip(tr("Save the current file with a different name"));
-    connect(saveAsAct, SIGNAL(triggered()), glwidget, SLOT(saveFileAs()));
+    connect(saveAsAct, SIGNAL(triggered()), this, SLOT(saveFileAs()));
 
     importModelAct = new QAction(tr("Import .OBJ"), this);
     importModelAct->setShortcut(QKeySequence(tr("Ctrl+i")));
     importModelAct->setStatusTip(tr("Import a mesh file"));
-    connect(importModelAct, SIGNAL(triggered()), glwidget, SLOT(importModel()));
+    connect(importModelAct, SIGNAL(triggered()), this, SLOT(importModel()));
 
     importBonesAct = new QAction(tr("Import .bones"), this);
     importBonesAct->setShortcut(QKeySequence(tr("Ctrl+i")));
     importBonesAct->setStatusTip(tr("Import a skeleton file"));
-    connect(importBonesAct, SIGNAL(triggered()), glwidget, SLOT(importBones()));
+    connect(importBonesAct, SIGNAL(triggered()), this, SLOT(importBones()));
 
     exportAct = new QAction(tr("Export..."), this);
     exportAct->setShortcut(QKeySequence(tr("Ctrl+e")));
@@ -59,7 +62,7 @@ void MainWindow::createActions()
     closeAct = new QAction(tr("&Close"), this);
     closeAct->setShortcuts(QKeySequence::Close);
     closeAct->setStatusTip(tr("Close the current model"));
-    connect(closeAct, SIGNAL(triggered()), glwidget, SLOT(closeFile()));
+    connect(closeAct, SIGNAL(triggered()), this, SLOT(closeFile()));
 
     exitAct = new QAction(tr("E&xit"), this);
     exitAct->setShortcut(QKeySequence(tr("Ctrl+q")));
@@ -73,31 +76,30 @@ void MainWindow::createActions()
     connect(autoSkinAct, SIGNAL(triggered()), glwidget, SLOT(autoSkinMesh()));
     
     
-    newAnimation = new QAction(tr("&New Animation"), this);
-    newAnimation->setShortcut(QKeySequence(tr("Ctrl+Shift+k")));
-    newAnimation->setStatusTip(tr("Creates a new animation."));
-    connect(newAnimation, SIGNAL(triggered()), glwidget, SLOT(newAnimation()));
+    newAnimationAct = new QAction(tr("&New Animation"), this);
+    newAnimationAct->setShortcut(QKeySequence(tr("Ctrl+Shift+k")));
+    newAnimationAct->setStatusTip(tr("Creates a new animation."));
+    //connect(newAnimationAct, SIGNAL(triggered()), glwidget, SLOT(newAnimation()));
 
-    setKeyframe = new QAction(tr("Set &Keyframe"), this);
-    setKeyframe->setShortcut(QKeySequence(tr("k")));
-    setKeyframe->setStatusTip(tr("Creates a keyframe at the current frame with the current pose"));
-    connect(setKeyframe, SIGNAL(triggered()), glwidget, SLOT(setKeyframe()));
+    setKeyframeAct = new QAction(tr("Set &Keyframe"), this);
+    setKeyframeAct->setShortcut(QKeySequence(tr("k")));
+    setKeyframeAct->setStatusTip(tr("Creates a keyframe at the current frame with the current pose"));
+    //connect(setKeyframeAct, SIGNAL(triggered()), glwidget, SLOT(setKeyframe()));
     
-    delKeyframe = new QAction(tr("De&lete Keyframe"), this);
-    delKeyframe->setShortcut(QKeySequence(tr("Ctrl+k")));
-    delKeyframe->setStatusTip(tr("Deletes the keyframe at the current frame"));
-    connect(delKeyframe, SIGNAL(triggered()), glwidget, SLOT(deleteKeyframe()));
+    delKeyframeAct = new QAction(tr("De&lete Keyframe"), this);
+    delKeyframeAct->setShortcut(QKeySequence(tr("Ctrl+k")));
+    delKeyframeAct->setStatusTip(tr("Deletes the keyframe at the current frame"));
+    //connect(delKeyframeAct, SIGNAL(triggered()), glwidget, SLOT(deleteKeyframe()));
     
-    copyPose = new QAction(tr("&Copy Pose"), this);
-    copyPose->setShortcut(QKeySequence(tr("Ctrl+c")));
-    copyPose->setStatusTip(tr("Copies the current pose"));
-    connect(copyPose, SIGNAL(triggered()), glwidget, SLOT(copyPose()));
+    copyPoseAct = new QAction(tr("&Copy Pose"), this);
+    copyPoseAct->setShortcut(QKeySequence(tr("Ctrl+c")));
+    copyPoseAct->setStatusTip(tr("Copies the current pose"));
+    //connect(copyPoseAct, SIGNAL(triggered()), glwidget, SLOT(copyPose()));
     
-    pastePose = new QAction(tr("&Paste Pose"), this);
-    pastePose->setShortcut(QKeySequence(tr("Ctrl+v")));
-    pastePose->setStatusTip(tr("Pastes the pose that was previously copied"));
-    connect(pastePose, SIGNAL(triggered()), glwidget, SLOT(pastePose()));
-    
+    pastePoseAct = new QAction(tr("&Paste Pose"), this);
+    pastePoseAct->setShortcut(QKeySequence(tr("Ctrl+v")));
+    pastePoseAct->setStatusTip(tr("Pastes the pose that was previously copied"));
+    //connect(pastePoseAct, SIGNAL(triggered()), glwidget, SLOT(pastePose()));
 }
 
 void MainWindow::createMenus()
@@ -122,22 +124,107 @@ void MainWindow::createMenus()
     skinningMenu->addAction(autoSkinAct);
 
     animationMenu = menuBar()->addMenu(tr("&Animation"));
-    animationMenu->addAction(newAnimation);
-    animationMenu->addAction(setKeyframe);
-    animationMenu->addAction(delKeyframe);
-    animationMenu->addAction(copyPose);
-    animationMenu->addAction(pastePose);
+    animationMenu->addAction(newAnimationAct);
+    animationMenu->addAction(setKeyframeAct);
+    animationMenu->addAction(delKeyframeAct);
+    animationMenu->addAction(copyPoseAct);
+    animationMenu->addAction(pastePoseAct);
 }
 
-void MainWindow::contextMenuEvent(QContextMenuEvent *event)
+void MainWindow::newFile()
 {
+    // TODO
 }
 
-void MainWindow::open()
+void MainWindow::openFile()
 {
     QString filename = QFileDialog::getOpenFileName(this,
             tr("Open GSM"), ".", tr("GSM Files (*.gsm)"));
-
-    if (!filename.isEmpty())
-        glwidget->openFile(filename);
 }
+
+void MainWindow::closeFile()
+{
+}
+
+void MainWindow::saveFile()
+{
+}
+
+void MainWindow::saveFileAs()
+{
+}
+
+void MainWindow::importModel()
+{
+    QString filename = QFileDialog::getOpenFileName(this, tr("Import Model"),
+            ".", tr("OBJ Files (*.obj)"));
+
+    if (filename.isEmpty()) return;
+
+    bool skinned = true;
+    rawmesh *newmesh = loadRawMesh(filename.toAscii(), skinned);
+    if (!newmesh)
+        QMessageBox::information(this, tr("Unable to import mesh"),
+                tr("Couldn't parse mesh file"));
+
+    // TODO assign
+    freeRawMesh(newmesh);
+}
+
+void MainWindow::importBones()
+{
+    QString filename = QFileDialog::getOpenFileName(this, tr("Import Bones"),
+            ".", tr("Skeleton Files (*.bones)"));
+
+    if (filename.isEmpty()) return;
+
+    Skeleton *newskel = Skeleton::readSkeleton(filename.toStdString());
+    
+    if (!newskel)
+    {
+        QMessageBox::information(this, tr("Unable to import skeleton"),
+                tr("Couldn't parse bones file"));
+        return;
+    }
+
+    // TODO assign
+    delete newskel;
+}
+
+void MainWindow::writeGSM(const QString &path)
+{
+    gsm *gsmf;
+    if (!(gsmf = gsm_open(path.toAscii())))
+    {
+        QMessageBox::information(this, tr("Unable to open gsm file"),
+                tr("TODO There should be an error message here..."));
+        return;
+    }
+
+    /* TODO
+    if (skeleton)
+    {
+        // Get a temp file
+        char tmpname[] = "/tmp/geoeditXXXXXX";
+        int fd = mkstemp(tmpname); // keep fd for gsm_set_bones
+        std::cout << "writing skeleton to temp file " << tmpname << '\n';
+        // write skeleton to tmpfile
+        std::ofstream f(tmpname);
+        writeSkeleton(skeleton, f);
+        // write to gsm
+        gsm_set_bones(gsmf, fd);
+
+    }
+    if (rmesh)
+    {
+        std::cout << "writing mesh\n";
+        FILE *meshf = tmpfile();
+        assert(meshf);
+        writeRawMesh(rmesh, meshf);
+        gsm_set_mesh(gsmf, meshf);
+    }
+    */
+
+    gsm_close(gsmf);
+}
+

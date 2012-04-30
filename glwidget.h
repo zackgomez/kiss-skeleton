@@ -31,14 +31,6 @@ public:
     QSize sizeHint() const;
 
 public slots:
-    void newFile();
-// TODO no arg
-    void openFile(const QString &path);
-    void importModel();
-    void importBones();
-    void saveFile();
-    void saveFileAs();
-    void closeFile();
     void autoSkinMesh();
 
 protected:
@@ -99,17 +91,13 @@ private:
     void setBoneTranslation(Bone* joint, const glm::vec2 &dragPos);
     void setBoneRotation(Bone* joint, const glm::vec2 &dragPos);
     void setBoneScale(Bone* joint, const glm::vec2 &dragPos);
-    // Timeline functions
-    void setPoseFromFrame(int frame);
-    void setFrame(int frame);
 
     // Rendering helpers
-    void renderEditGrid() const;
     void renderBone(const Bone *bone);
     void renderAxes(const glm::mat4 &modelTransform);
     void renderRotationSphere(const glm::mat4 &modelTransform);
     void renderScaleCircle(const glm::mat4 &modelTransform);
-    void renderSkinnedMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
+    void renderSkinnedMesh(const glm::mat4 &modelMatrix, const vert_p4t2n3j8 *verts,
             size_t nverts, const glm::vec4 &color);
 
     glm::mat4 getProjectionMatrix() const;
@@ -124,9 +112,8 @@ private:
     static const float CIRCLE_RADIUS;
     static const float SCALE_CIRCLE_RADIUS;
     static const float SELECT_THRESH;
-    static const int TRANSLATION_MODE = 1, ROTATION_MODE = 2, SCALE_MODE = 3;
-    static const int NO_MESH_MODE, SKINNING_MODE, POSING_MODE;
-
-    enum { OBJ_NONE, OBJ_HEAD, OBJ_TIP };
+    enum { NO_MESH_MODE = 0, SKINNING_MODE, POSING_MODE };
+    enum { TRANSLATION_MODE = 1, ROTATION_MODE, SCALE_MODE };
+    enum { OBJ_NONE = 0, OBJ_HEAD, OBJ_TIP };
 };
 
