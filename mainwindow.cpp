@@ -10,7 +10,10 @@
 
 MainWindow::MainWindow()
 {
-    glwidget = new GLWidget;
+    cdata = new CharacterData;
+    cdata->skeleton = NULL;
+    cdata->rmesh = NULL;
+    glwidget = new GLWidget(this, cdata);
     setCentralWidget(glwidget);
     glwidget->setFocus();
 
@@ -187,8 +190,9 @@ void MainWindow::importBones()
         return;
     }
 
-    // TODO assign
-    delete newskel;
+    // Clean up old skeleton
+    delete cdata->skeleton;
+    cdata->skeleton = newskel;
 }
 
 void MainWindow::writeGSM(const QString &path)

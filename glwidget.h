@@ -20,11 +20,17 @@ class Joint;
 struct graph;
 struct Bone;
 
+struct CharacterData
+{
+    Skeleton *skeleton;
+    rawmesh *rmesh;
+};
+
 class GLWidget : public QGLWidget
 {
     Q_OBJECT
 public:
-    GLWidget(QWidget *parent = 0);
+    GLWidget(QWidget *parent, CharacterData *cdata);
     ~GLWidget();
 
     QSize minimumSizeHint() const;
@@ -43,15 +49,11 @@ protected:
     void mouseMoveEvent(QMouseEvent *event);
     void wheelEvent(QWheelEvent *event);
 
-    // helper functions
-    void writeGSM(const QString &path);
-
 private:
     // Data members
+    CharacterData *cdata_;
     Arcball *arcball;
-    Skeleton *skeleton;
     shader *shaderProgram;
-    rawmesh *rmesh;
     vert_p4t2n3j8 *verts;
     size_t nverts;
     graph *vertgraph;

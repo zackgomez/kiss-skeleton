@@ -2,6 +2,7 @@
 #include <QMainWindow>
 
 class GLWidget;
+struct CharacterData;
 
 class MainWindow : public QMainWindow
 {
@@ -20,6 +21,11 @@ private slots:
     void closeFile();
 
 private:
+    // Data members
+    CharacterData *cdata;
+    GLWidget *glwidget;
+
+    // Menus and actions
     QMenu *fileMenu;
     QMenu *importMenu;
     QMenu *skinningMenu;
@@ -43,8 +49,7 @@ private:
     QAction *copyPoseAct;
     QAction *pastePoseAct;
 
-    GLWidget *glwidget;
-
+    // Helper functions
     void createActions();
     void createMenus();
     void writeGSM(const QString &path);

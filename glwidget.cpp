@@ -30,14 +30,13 @@ static void renderLine(const glm::mat4 &transform,
 static void renderPoints(const glm::mat4 &transform, vert *verts, size_t nverts);
 static void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh,
         int joint, const glm::vec4 &color);
-static void renderWeightedPoints(const glm::mat4 &transform, const rawmesh *mesh,
-        const graph *g, size_t ji, const glm::vec4 &color);
 static void renderMesh(const glm::mat4 &transform, const vert_p4t2n3j8 *verts,
         size_t nverts);
 static void renderEditGrid(const glm::mat4 &transform);
 
-GLWidget::GLWidget(QWidget *parent) :
+GLWidget::GLWidget(QWidget *parent, CharacterData *cdata) :
     QGLWidget(parent),
+    cdata_(cdata),
     renderSelected(true),
     selectedBone(NULL),
     meshMode(NO_MESH_MODE),
@@ -47,13 +46,11 @@ GLWidget::GLWidget(QWidget *parent) :
     rotating(false), translating(false), zooming(false)
 {
     vertgraph = NULL;
-    skeleton = NULL;
     bindPose = NULL;
     copiedPose = NULL;
 
     selectedObject = OBJ_HEAD;
 
-    rmesh = NULL;
     verts = NULL;
 }
 
@@ -73,18 +70,18 @@ QSize GLWidget::sizeHint() const
 
 void GLWidget::autoSkinMesh()
 {
-    if (!rmesh || !skeleton)
+    if (!cdata_->rmesh || !cdata_->skeleton)
         return;
 
     // TODO display a QProgressDialog here
-    graph *newgraph = autoSkinMeshBest(rmesh, skeleton);
+    graph *newgraph = autoSkinMeshBest(cdata_->rmesh, cdata_->skeleton);
     // regenerate verts
     free(verts);
-    verts = createSkinnedVertArray(rmesh, &nverts);
+    verts = createSkinnedVertArray(cdata_->rmesh, &nverts);
 
-    skeleton->setBindPose();
+    cdata_->skeleton->setBindPose();
     freeSkeletonPose(bindPose);
-    bindPose = skeleton->currentPose();
+    bindPose = cdata_->skeleton->currentPose();
     free_graph(vertgraph);
     vertgraph = newgraph;
 
@@ -134,9 +131,9 @@ void GLWidget::paintGL()
     renderEditGrid(projMatrix * viewMatrix);
 
     // Render the joints
-    if (skeleton)
+    if (cdata_->skeleton)
     {
-        const std::vector<Bone*> bones = skeleton->getBones();
+        const std::vector<Bone*> bones = cdata_->skeleton->getBones();
         for (size_t i = 0; i < bones.size(); i++)
             renderBone(bones[i]);
         // now render and ui on the selectedBone
@@ -169,7 +166,7 @@ void GLWidget::paintGL()
 
         glColor3f(1.f, 1.f, 1.f);
         glLineWidth(1);
-        renderPoints(viewMatrix, rmesh->verts, rmesh->nverts);
+        renderPoints(viewMatrix, cdata_->rmesh->verts, cdata_->rmesh->nverts);
 
 
         glEnable(GL_DEPTH_TEST);
@@ -183,9 +180,9 @@ void GLWidget::paintGL()
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
     // Render points ineither mode
-    if (selectedBone && rmesh && renderSelected)
+    if (selectedBone && cdata_->rmesh && renderSelected)
     {
-        renderSelectedPoints(viewMatrix, rmesh, selectedBone->joint->index,
+        renderSelectedPoints(viewMatrix, cdata_->rmesh, selectedBone->joint->index,
                 glm::vec4(0,1,0,1));
     }
 }
@@ -203,7 +200,7 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
         if (meshMode == POSING_MODE)
         {
             meshMode = SKINNING_MODE;
-            skeleton->setPose(bindPose);
+            cdata_->skeleton->setPose(bindPose);
         }
         else if (meshMode == SKINNING_MODE)
         {
@@ -222,13 +219,13 @@ void GLWidget::keyPressEvent(QKeyEvent *e)
         std::string name = "NEWBONE";
         
         selectedBone = selectedObject == OBJ_TIP ?
-            skeleton->newBoneTail(selectedBone, name) :
-            skeleton->newBoneHead(selectedBone, name);
+            cdata_->skeleton->newBoneTail(selectedBone, name) :
+            cdata_->skeleton->newBoneHead(selectedBone, name);
         selectedObject = OBJ_HEAD;
     }
     else if (e->key() == Qt::Key_D && selectedBone)
     {
-        skeleton->removeBone(selectedBone);
+        cdata_->skeleton->removeBone(selectedBone);
         selectedBone = NULL;
         selectedObject = OBJ_NONE;
     }
@@ -285,7 +282,7 @@ void GLWidget::mousePressEvent(QMouseEvent *event)
 
 void GLWidget::selectBone(const glm::vec2 &screenCoord)
 {
-    if (!skeleton) return;
+    if (!cdata_->skeleton) return;
 
     // Constants
     static const float END_SELECT_THRESH = 0.015f;
@@ -297,7 +294,7 @@ void GLWidget::selectBone(const glm::vec2 &screenCoord)
     Bone *bestbone = NULL;
     int bestobj = OBJ_NONE;
 
-    const std::vector<Bone *> bones = skeleton->getBones();
+    const std::vector<Bone *> bones = cdata_->skeleton->getBones();
     for (size_t i = 0; i < bones.size(); i++)
     {
         Bone* b = bones[i];
@@ -441,7 +438,7 @@ void GLWidget::setTranslationVec(const glm::vec2 &clickPos)
     if (localMode)
         translationVec = applyMatrix(parentjoint->worldTransform, translationVec, false);
     glm::mat4 parentTransform = parentjoint->parent == Skeleton::ROOT_PARENT ?
-        glm::mat4(1.f) : skeleton->getJoint(parentjoint->parent)->worldTransform;
+        glm::mat4(1.f) : cdata_->skeleton->getJoint(parentjoint->parent)->worldTransform;
     translationVec = applyMatrix(glm::inverse(parentTransform), translationVec, false);
 
     // If we got here, then it's a valid drag and translationVec is already set
@@ -496,7 +493,7 @@ void GLWidget::setRotationVec(const glm::vec2 &clickPos)
     // Transform the rotation vector into parent space so that the transformation
     // is around the global axes
     Joint *parentJoint = selectedBone->joint;
-    glm::mat4 parentTransform = parentJoint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : skeleton->getJoint(parentJoint->parent)->worldTransform;
+    glm::mat4 parentTransform = parentJoint->parent == Skeleton::ROOT_PARENT ? glm::mat4(1.f) : cdata_->skeleton->getJoint(parentJoint->parent)->worldTransform;
     rotationVec = globalVec;
     if (localMode)
         rotationVec = applyMatrix(parentJoint->worldTransform, rotationVec, false);
@@ -549,9 +546,9 @@ void GLWidget::setBoneTranslation(Bone* bone, const glm::vec2 &dragPos)
 
     // Update correct position
     if (selectedObject == OBJ_HEAD)
-        skeleton->setBoneHeadPos(bone, finalPos);
+        cdata_->skeleton->setBoneHeadPos(bone, finalPos);
     else if (selectedObject == OBJ_TIP)
-        skeleton->setBoneTailPos(bone, finalPos);
+        cdata_->skeleton->setBoneTailPos(bone, finalPos);
 }
 
 void GLWidget::setBoneRotation(Bone* bone, const glm::vec2 &dragPos)
@@ -570,7 +567,7 @@ void GLWidget::setBoneRotation(Bone* bone, const glm::vec2 &dragPos)
 
     glm::quat newrot = deltarot * startingRot;
 
-    skeleton->setBoneRotation(bone, quatToAxisAngle(newrot));
+    cdata_->skeleton->setBoneRotation(bone, quatToAxisAngle(newrot));
 }
 
 void GLWidget::setBoneScale(Bone* bone, const glm::vec2 &dragPos)
@@ -578,12 +575,13 @@ void GLWidget::setBoneScale(Bone* bone, const glm::vec2 &dragPos)
     glm::vec2 center(circleNDC);
     float newScale = glm::length(dragPos - center) / SCALE_CIRCLE_RADIUS;
 
-    skeleton->setBoneScale(bone, newScale);
+    cdata_->skeleton->setBoneScale(bone, newScale);
 }
 
 void GLWidget::renderBone(const Bone *bone)
 {
     const Joint *joint = bone->joint;
+    const glm::mat4 projMat = getProjectionMatrix();
     const glm::mat4 viewMat = getViewMatrix();
     const glm::mat4 headMat = joint->worldTransform;
 
@@ -594,12 +592,12 @@ void GLWidget::renderBone(const Bone *bone)
         glColor3f(1, 1, 1);
 
     // Draw cube for head of bone
-    glLoadMatrixf(glm::value_ptr(glm::scale(viewMat * headMat,
+    glLoadMatrixf(glm::value_ptr(glm::scale(projMat * viewMat * headMat,
                     glm::vec3(0.08f))));
     renderCube();
 
     // Draw line connected head and tail
-    glLoadMatrixf(glm::value_ptr(viewMat * headMat));
+    glLoadMatrixf(glm::value_ptr(projMat * viewMat * headMat));
     glBegin(GL_LINES);
     glVertex3f(0.f, 0.f, 0.f);
     glVertex3fv(glm::value_ptr(bone->tipPos));
@@ -608,7 +606,7 @@ void GLWidget::renderBone(const Bone *bone)
     // draw tail
     const glm::mat4 tailMat = glm::scale(glm::translate(headMat, bone->tipPos),
             glm::vec3(0.08f));
-    glLoadMatrixf(glm::value_ptr(viewMat * tailMat));
+    glLoadMatrixf(glm::value_ptr(projMat * viewMat * tailMat));
     renderCube();
 }
 
@@ -754,7 +752,7 @@ void GLWidget::renderRotationSphere(const glm::mat4 &modelMat)
 void GLWidget::renderSkinnedMesh(const glm::mat4 &modelMatrix, const vert_p4t2n3j8 *verts,
         size_t nverts, const glm::vec4 &color)
 {
-    const std::vector<Joint*> joints = skeleton->getJoints();
+    const std::vector<Joint*> joints = cdata_->skeleton->getJoints();
     // First get a list of the necessary transformations
     std::vector<glm::mat4> jointMats(joints.size());
     for (size_t i = 0; i < joints.size(); i++)
@@ -923,27 +921,6 @@ void renderSelectedPoints(const glm::mat4 &transform, rawmesh *mesh, int joint,
                     glColor4f(0.8f, 0.1f, 0.1f, 1.f);
                 glVertex4fv(verts[i].pos);
             }
-    glEnd();
-    glPointSize(1);
-    glEnable(GL_DEPTH_TEST);
-}
-
-void renderWeightedPoints(const glm::mat4 &transform, const rawmesh *mesh,
-        const graph *g, size_t ji, const glm::vec4 &color)
-{
-    glLoadMatrixf(glm::value_ptr(transform));
-    glDisable(GL_DEPTH_TEST);
-    const size_t nverts = mesh->nverts;
-    const vert* verts = mesh->verts;
-
-    glPointSize(5);
-    glBegin(GL_POINTS);
-    glColor4fv(glm::value_ptr(color));
-    for (size_t i = 0; i < nverts; i++)
-    {
-        if (g->nodes.find(i)->second->weights[ji] != -HUGE_VAL)
-            glVertex4fv(verts[i].pos);
-    }
     glEnd();
     glPointSize(1);
     glEnable(GL_DEPTH_TEST);
