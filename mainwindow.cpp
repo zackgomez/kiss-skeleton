@@ -148,6 +148,34 @@ void MainWindow::openFile()
 {
     QString filename = QFileDialog::getOpenFileName(this,
             tr("Open GSM"), ".", tr("GSM Files (*.gsm)"));
+
+    gsm *f = gsm_open(filename.toAscii());
+    if (!f)
+    {
+        QMessageBox::information(this, tr("Unable to open file."),
+                tr("Couldn't open .gsm file"));
+        return;
+    }
+
+    // Clear, to load new stuff
+    closeFile();
+
+    size_t len;
+    char *data = (char *) gsm_bones_contents(f, len);
+    if (data)
+        cdata->skeleton = Skeleton::readSkeleton(data, len);
+    free(data);
+
+    bool skinned = true;
+    data = (char *) gsm_mesh_contents(f, len);
+    if (data)
+        cdata->rmesh = readRawMesh(data, len, skinned);
+    free(data);
+
+    gsm_close(f);
+
+    currentFile = filename;
+    glwidget->dirtyCData();
 }
 
 void MainWindow::closeFile()
@@ -157,15 +185,26 @@ void MainWindow::closeFile()
     freeRawMesh(cdata->rmesh);
     cdata->rmesh = NULL;
 
+    currentFile.clear();
+
     glwidget->dirtyCData();
 }
 
 void MainWindow::saveFile()
 {
+    if (!currentFile.isEmpty())
+        writeGSM(currentFile);
+    else
+        saveFileAs();
 }
 
 void MainWindow::saveFileAs()
 {
+    QString filename = QFileDialog::getSaveFileName(this, tr("Save Character"),
+            ".", tr("GSM Files (*.gsm)"));
+
+    writeGSM(filename);
+    currentFile = filename;
 }
 
 void MainWindow::importModel()

@@ -47,7 +47,6 @@ GLWidget::GLWidget(QWidget *parent, CharacterData *cdata) :
 {
     verts = NULL;
     vertgraph = NULL;
-    bindPose = NULL;
 
     selectedObject = OBJ_HEAD;
 }
@@ -99,6 +98,8 @@ void GLWidget::dirtyCData()
         // TODO perhaps deal with some poses (bind pose)
     }
     */
+
+    updateGL();
 }
 
 void GLWidget::autoSkinMesh()
@@ -113,8 +114,8 @@ void GLWidget::autoSkinMesh()
     verts = createSkinnedVertArray(cdata_->rmesh, &nverts);
 
     cdata_->skeleton->setBindPose();
-    freeSkeletonPose(bindPose);
-    bindPose = cdata_->skeleton->currentPose();
+    //freeSkeletonPose(bindPose);
+    //bindPose = cdata_->skeleton->currentPose();
     free_graph(vertgraph);
     vertgraph = newgraph;
 
@@ -199,7 +200,7 @@ void GLWidget::paintGL()
 
         glColor3f(1.f, 1.f, 1.f);
         glLineWidth(1);
-        renderPoints(viewMatrix, cdata_->rmesh->verts, cdata_->rmesh->nverts);
+        renderPoints(projMatrix * viewMatrix, cdata_->rmesh->verts, cdata_->rmesh->nverts);
 
         glEnable(GL_DEPTH_TEST);
     }
@@ -211,10 +212,13 @@ void GLWidget::paintGL()
                     glm::vec4(0.5f, 0.5f, 0.8f, 0.5f));
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
+
     // Render points ineither mode
+    std::cout << selectedBone << ' ' << cdata_->rmesh << ' ' << renderSelected << '\n';
     if (selectedBone && cdata_->rmesh && renderSelected)
     {
-        renderSelectedPoints(viewMatrix, cdata_->rmesh, selectedBone->joint->index,
+        std::cout << "rendering selected\n";
+        renderSelectedPoints(projMatrix * viewMatrix, cdata_->rmesh, selectedBone->joint->index,
                 glm::vec4(0,1,0,1));
     }
 }
@@ -227,19 +231,7 @@ void GLWidget::resizeGL(int width, int height)
 
 void GLWidget::keyPressEvent(QKeyEvent *e)
 {
-    if (e->key() == Qt::Key_Tab && meshMode != NO_MESH_MODE)
-    {
-        if (meshMode == POSING_MODE)
-        {
-            meshMode = SKINNING_MODE;
-            cdata_->skeleton->setPose(bindPose);
-        }
-        else if (meshMode == SKINNING_MODE)
-        {
-            meshMode = POSING_MODE;
-        }
-    }
-    else if (e->key() == Qt::Key_R)
+    if (e->key() == Qt::Key_R)
         editMode = ROTATION_MODE;
     else if (e->key() == Qt::Key_T)
         editMode = TRANSLATION_MODE;

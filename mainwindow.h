@@ -24,6 +24,7 @@ private:
     // Data members
     CharacterData *cdata;
     GLWidget *glwidget;
+    QString currentFile;
 
     // Menus and actions
     QMenu *fileMenu;
