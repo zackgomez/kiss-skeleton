@@ -63,10 +63,7 @@ private:
 
     bool renderSelected;
 
-    QString currentFile;
-
     int windowWidth, windowHeight;
-    SkeletonPose *bindPose;
     Bone* selectedBone;
     int selectedObject; // head, bone, tip
 

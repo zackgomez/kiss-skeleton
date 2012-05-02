@@ -71,6 +71,7 @@ void GLWidget::dirtyCData()
     dragging = false;
     rotating = translating = zooming = false;
     localMode = false;
+    meshMode = NO_MESH_MODE;
 
     if (vertgraph)
     {

@@ -3,6 +3,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <iostream>
+#include <fstream>
 #include "mainwindow.h"
 #include "glwidget.h"
 #include "skeleton.h"
@@ -136,7 +137,11 @@ void MainWindow::createMenus()
 
 void MainWindow::newFile()
 {
-    // TODO
+    closeFile();
+
+    cdata->skeleton = new Skeleton();
+
+    glwidget->dirtyCData();
 }
 
 void MainWindow::openFile()
@@ -147,6 +152,12 @@ void MainWindow::openFile()
 
 void MainWindow::closeFile()
 {
+    delete cdata->skeleton;
+    cdata->skeleton = NULL;
+    freeRawMesh(cdata->rmesh);
+    cdata->rmesh = NULL;
+
+    glwidget->dirtyCData();
 }
 
 void MainWindow::saveFile()
@@ -209,8 +220,7 @@ void MainWindow::writeGSM(const QString &path)
         return;
     }
 
-    /* TODO
-    if (skeleton)
+    if (cdata->skeleton)
     {
         // Get a temp file
         char tmpname[] = "/tmp/geoeditXXXXXX";
@@ -218,20 +228,19 @@ void MainWindow::writeGSM(const QString &path)
         std::cout << "writing skeleton to temp file " << tmpname << '\n';
         // write skeleton to tmpfile
         std::ofstream f(tmpname);
-        writeSkeleton(skeleton, f);
+        writeSkeleton(cdata->skeleton, f);
         // write to gsm
         gsm_set_bones(gsmf, fd);
 
     }
-    if (rmesh)
+    if (cdata->rmesh)
     {
         std::cout << "writing mesh\n";
         FILE *meshf = tmpfile();
         assert(meshf);
-        writeRawMesh(rmesh, meshf);
+        writeRawMesh(cdata->rmesh, meshf);
         gsm_set_mesh(gsmf, meshf);
     }
-    */
 
     gsm_close(gsmf);
 }
